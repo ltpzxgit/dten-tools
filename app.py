@@ -1,93 +1,128 @@
 import streamlit as st
 import pandas as pd
 import io
+import re
 
-st.set_page_config(page_title="CSV → History Builder", layout="wide")
+st.set_page_config(page_title="DTEN Log → History Tool", layout="wide")
+st.title("🚀 DTEN Log → History Builder")
 
-st.title("📊 Build History from Raw CSV")
+# =========================
+# 🔥 Extract log function
+# =========================
+def extract_log(df, log_type="request"):
+    records = []
+    current_id = None
+
+    for msg in df["@message"].astype(str):
+
+        # หา Request ID
+        id_match = re.search(r"Request ID:\s*([a-f0-9\-]+)", msg)
+        if id_match:
+            current_id = id_match.group(1)
+
+        # หา payload
+        if "Request:" in msg or "Response:" in msg:
+            records.append({
+                "requestId": current_id,
+                f"{log_type}_payload": msg.strip()
+            })
+
+    return pd.DataFrame(records)
+
 
 # =========================
 # Upload
 # =========================
-csv_files = st.file_uploader("📥 Upload CSV (8 files)", accept_multiple_files=True)
-history_template = st.file_uploader("📄 Upload History Template (.xlsx)")
+files = st.file_uploader("📥 Upload CSV (request/response)", accept_multiple_files=True)
+template_file = st.file_uploader("📄 Upload History Template (.xlsx)")
 
-if csv_files and history_template:
+if files and template_file:
 
-    # =========================
-    # โหลด template
-    # =========================
-    df_template = pd.read_excel(history_template)
-
-    st.subheader("📌 Template Columns")
-    st.write(df_template.columns.tolist())
-
-    # =========================
-    # แยก request / response
-    # =========================
     req_list = []
     res_list = []
 
-    for file in csv_files:
-        name = file.name.lower()
-        df = pd.read_csv(file)
+    # =========================
+    # แยก + extract
+    # =========================
+    for file in files:
+        filename = file.name.lower()
 
-        if "request" in name:
+        df_raw = pd.read_csv(file)
+
+        if "@message" not in df_raw.columns:
+            st.error(f"❌ ไฟล์ {file.name} ไม่มี @message")
+            st.stop()
+
+        if "request" in filename:
+            df = extract_log(df_raw, "request")
             req_list.append(df)
-        elif "response" in name:
+
+        elif "response" in filename:
+            df = extract_log(df_raw, "response")
             res_list.append(df)
+
+    if not req_list or not res_list:
+        st.error("❌ ต้องมีทั้ง request และ response")
+        st.stop()
 
     df_req = pd.concat(req_list, ignore_index=True)
     df_res = pd.concat(res_list, ignore_index=True)
 
     # =========================
-    # 🔥 Merge (สำคัญ)
+    # 🔥 Merge
     # =========================
-    merge_key = "requestId"  # 👉 เปลี่ยนตามของจริง
-
     df_merge = pd.merge(
         df_req,
         df_res,
-        on=merge_key,
-        how="left",
-        suffixes=("_req", "_res")
+        on="requestId",
+        how="left"
     )
 
     # =========================
-    # 🔥 Mapping แบบ Flexible
+    # โหลด template
+    # =========================
+    df_template = pd.read_excel(template_file)
+
+    # =========================
+    # 🔥 Map → History
     # =========================
     df_final = pd.DataFrame()
 
     for col in df_template.columns:
 
-        # 👇 logic mapping (แก้ตรงนี้ให้ match ของจริง)
-        if col == "Request ID":
-            df_final[col] = df_merge.get("requestId")
+        if col.lower() in ["request id", "requestid"]:
+            df_final[col] = df_merge["requestId"]
 
-        elif col == "Request Time":
-            df_final[col] = df_merge.get("timestamp_req")
+        elif "request" in col.lower() and "time" in col.lower():
+            df_final[col] = df_merge["request_payload"].str.extract(
+                r"(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})"
+            )
 
-        elif col == "Response Time":
-            df_final[col] = df_merge.get("timestamp_res")
+        elif "response" in col.lower() and "time" in col.lower():
+            df_final[col] = df_merge["response_payload"].str.extract(
+                r"(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})"
+            )
 
-        elif col == "Request":
-            df_final[col] = df_merge.get("message_req")
+        elif "request" in col.lower():
+            df_final[col] = df_merge["request_payload"]
 
-        elif col == "Response":
-            df_final[col] = df_merge.get("message_res")
+        elif "response" in col.lower():
+            df_final[col] = df_merge["response_payload"]
 
-        elif col == "Status":
-            df_final[col] = df_merge.get("status_res")
+        elif "status" in col.lower():
+            df_final[col] = df_merge["response_payload"].str.extract(
+                r"status[=: ]+(\w+)"
+            )
 
         else:
-            # column ที่ไม่มีใน raw → ใส่ค่าว่าง
             df_final[col] = None
 
     # =========================
-    # Format เพิ่ม
+    # Format
     # =========================
-    if "Request Time" in df_final.columns:
-        df_final["Request Time"] = pd.to_datetime(df_final["Request Time"], errors="coerce")
+    for col in df_final.columns:
+        if "time" in col.lower():
+            df_final[col] = pd.to_datetime(df_final[col], errors="coerce")
 
     # =========================
     # Preview
@@ -108,4 +143,4 @@ if csv_files and history_template:
         file_name="history_result.xlsx"
     )
 
-    st.success("✅ Build สำเร็จ")
+    st.success("✅ Build เสร็จแล้ว พร้อมใช้")
