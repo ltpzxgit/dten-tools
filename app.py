@@ -138,7 +138,12 @@ if uploaded_files:
     df_result.to_excel("final_result.xlsx", index=False)
 
     with open("final_result.xlsx", "rb") as f:
-        st.download_button("📥 Download Final Result", f)
+    st.download_button(
+        label="📥 Download Final Result",
+        data=f,
+        file_name="final_result.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
 
 else:
     st.info("👆 Upload files to start")
