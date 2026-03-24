@@ -3,7 +3,7 @@ import pandas as pd
 import re
 
 st.set_page_config(page_title="DTEN Full Processor", layout="wide")
-st.title("🔥 DTEN Full Processor (All Columns)")
+st.title("🔥 DTEN Full Processor (Stable Version)")
 
 # =========================
 # Upload Files
@@ -20,15 +20,15 @@ uploaded_files = st.file_uploader(
 def extract_device_id(text):
     if pd.isna(text):
         return None
-    return re.search(r'\b[A-Z]{1,4}\d{4,8}\b', str(text)).group(0) \
-        if re.search(r'\b[A-Z]{1,4}\d{4,8}\b', str(text)) else None
+    match = re.search(r'\b[A-Z]{1,4}\d{4,8}\b', str(text))
+    return match.group(0) if match else None
 
 
 def extract_request_id(text):
     if pd.isna(text):
         return None
-    return re.search(r'\b[0-9a-fA-F\-]{30,}\b', str(text)).group(0) \
-        if re.search(r'\b[0-9a-fA-F\-]{30,}\b', str(text)) else None
+    match = re.search(r'\b[0-9a-fA-F\-]{30,}\b', str(text))
+    return match.group(0) if match else None
 
 
 def extract_row(row):
@@ -52,21 +52,43 @@ if uploaded_files:
     all_df = []
 
     for file in uploaded_files:
-        df = pd.read_csv(file) if file.name.endswith("csv") else pd.read_excel(file)
+        try:
+            df = pd.read_csv(file) if file.name.endswith("csv") else pd.read_excel(file)
+        except:
+            st.error(f"❌ อ่านไฟล์ {file.name} ไม่ได้")
+            continue
 
-        df[["deviceId", "RequestId"]] = df.apply(extract_row, axis=1)
+        # =========================
+        # Extract (FIX SHAPE BUG)
+        # =========================
+        extracted = df.apply(extract_row, axis=1)
+        extracted.columns = ["deviceId", "RequestId"]
+
+        df["deviceId"] = extracted["deviceId"]
+        df["RequestId"] = extracted["RequestId"]
+
         df = df.dropna(subset=["deviceId"])
 
-        df["raw_text"] = df.astype(str).agg(" ".join, axis=1)
+        # =========================
+        # Create raw_text (FIX ERROR)
+        # =========================
+        df["raw_text"] = df.apply(
+            lambda row: " ".join([str(x) for x in row.values]),
+            axis=1
+        )
 
         all_df.append(df)
+
+    if not all_df:
+        st.error("❌ ไม่มีข้อมูล usable")
+        st.stop()
 
     df_all = pd.concat(all_df, ignore_index=True)
 
     st.write(f"🔍 Devices Found: {df_all['deviceId'].nunique()}")
 
     # =========================
-    # Build Base Table
+    # Build Result
     # =========================
     devices = sorted(df_all["deviceId"].unique())
 
@@ -75,33 +97,23 @@ if uploaded_files:
         "deviceId": devices
     })
 
-    # =========================
-    # RequestId (ล่าสุด)
-    # =========================
+    # Request ล่าสุด
     req_map = df_all.groupby("deviceId")["RequestId"].last().to_dict()
     df_result["RequestId"] = df_result["deviceId"].map(req_map)
 
-    # =========================
     # ProStatus
-    # =========================
     df_result["ProStatus"] = "PROD"
 
-    # =========================
     # Carrier
-    # =========================
     df_result["Carrier"] = df_result["deviceId"].apply(
         lambda x: "AIS" if str(x).startswith("A") else "TRUE"
     )
 
-    # =========================
-    # DTEN Result (เอา log ล่าสุด)
-    # =========================
+    # Result ล่าสุด
     result_map = df_all.groupby("deviceId")["raw_text"].last().to_dict()
     df_result["DTENLinkage Result"] = df_result["deviceId"].map(result_map)
 
-    # =========================
-    # TCAP Detection
-    # =========================
+    # TCAP
     tcap_devices = set(
         df_all[df_all["raw_text"].str.contains("TCAP", na=False)]["deviceId"]
     )
@@ -110,9 +122,7 @@ if uploaded_files:
         lambda x: "Yes" if x in tcap_devices else "No"
     )
 
-    # =========================
-    # AIS Logic
-    # =========================
+    # AIS logic
     df_result["sent to AIS"] = df_result["Carrier"].apply(
         lambda x: "Yes" if x == "AIS" else "No"
     )
@@ -122,7 +132,7 @@ if uploaded_files:
     # =========================
     # Output
     # =========================
-    st.success("✅ Done (Full Columns)")
+    st.success("✅ DONE (No Error)")
     st.dataframe(df_result, use_container_width=True)
 
     df_result.to_excel("final_result.xlsx", index=False)
