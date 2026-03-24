@@ -2,91 +2,76 @@ import streamlit as st
 import pandas as pd
 import re
 
-st.set_page_config(page_title="Column Pair Sorter", layout="wide")
+st.set_page_config(page_title="DTEN Tool", layout="wide")
 
-st.title("📊 Column Pair Sorter (Info + Debug by ID)")
+st.title("📊 DTEN Linkage Processor")
 
-# =========================
-# Upload
-# =========================
-uploaded_file = st.file_uploader("📥 Upload CSV file", type=["csv"])
+# Upload files
+dten_file = st.file_uploader("📥 Upload DTENLinkage File", type=["csv", "xlsx"])
+tcap_file = st.file_uploader("📥 Upload DTENTCAPLinkage File", type=["csv", "xlsx"])
+template_file = st.file_uploader("📥 Upload Template File", type=["xlsx"])
 
-if uploaded_file:
+def extract_device_id(text):
+    if pd.isna(text):
+        return None
+    match = re.search(r'[A-Z]{1,3}\d{5}', str(text))
+    return match.group(0) if match else None
 
-    df = pd.read_csv(uploaded_file)
-    st.write("### 🔍 Preview Data")
-    st.dataframe(df.head())
+if dten_file and tcap_file and template_file:
 
-    columns = df.columns.tolist()
+    # Read files
+    df_dten = pd.read_csv(dten_file) if dten_file.name.endswith("csv") else pd.read_excel(dten_file)
+    df_tcap = pd.read_csv(tcap_file) if tcap_file.name.endswith("csv") else pd.read_excel(tcap_file)
+    df_template = pd.read_excel(template_file)
 
-    # =========================
-    # Detect columns
-    # =========================
-    datetime_cols = [c for c in columns if "time" in c.lower() or "date" in c.lower()]
-    info_cols = [c for c in columns if "info" in c.lower()]
-    debug_cols = [c for c in columns if "debug" in c.lower()]
+    # Extract Device ID
+    df_dten["deviceId"] = df_dten.astype(str).apply(lambda row: extract_device_id(" ".join(row)), axis=1)
+    df_dten = df_dten.dropna(subset=["deviceId"])
 
-    st.write("### 🧠 Detected Columns")
-    st.write("Datetime:", datetime_cols)
-    st.write("Info:", info_cols)
-    st.write("Debug:", debug_cols)
+    # Unique device
+    df_result = pd.DataFrame()
+    df_result["deviceId"] = df_dten["deviceId"].unique()
 
-    # =========================
-    # Extract ID
-    # =========================
-    def extract_id(col):
-        match = re.search(r'(\d+)', col)
-        return int(match.group(1)) if match else float('inf')
+    # ProStatus
+    df_result["ProStatus"] = "PROD"
 
-    # =========================
-    # Pair Info + Debug
-    # =========================
-    pairs = []
+    # Carrier logic
+    df_result["Carrier"] = df_result["deviceId"].apply(lambda x: "AIS" if str(x).startswith("A") else "TRUE")
 
-    for info in info_cols:
-        info_id = extract_id(info)
+    # DTENLinkage Result
+    df_dten["Result"] = df_dten.astype(str).apply(lambda row: " ".join(row), axis=1)
+    result_map = df_dten.groupby("deviceId")["Result"].first().to_dict()
+    df_result["DTENLinkage Result"] = df_result["deviceId"].map(result_map)
 
-        matched_debug = None
-        for debug in debug_cols:
-            if extract_id(debug) == info_id:
-                matched_debug = debug
-                break
+    # TCAP check
+    df_tcap["deviceId"] = df_tcap.astype(str).apply(lambda row: extract_device_id(" ".join(row)), axis=1)
+    tcap_set = set(df_tcap["deviceId"].dropna())
 
-        pairs.append((info_id, info, matched_debug))
+    df_result["DTENTCAPLinkage"] = df_result["deviceId"].apply(lambda x: "Yes" if x in tcap_set else "No")
 
-    # =========================
-    # Sort
-    # =========================
-    pairs_sorted = sorted(pairs, key=lambda x: x[0])
+    # sent to AIS
+    df_result["sent to AIS"] = df_result["Carrier"].apply(lambda x: "Yes" if x == "AIS" else "No")
 
-    # =========================
-    # Build new columns
-    # =========================
-    new_columns = []
+    # received from AIS
+    df_result["received from AIS"] = df_result["sent to AIS"]
 
-    new_columns.extend(datetime_cols)
+    # Merge with template (force column order)
+    final_df = df_template.copy()
 
-    for _, info, debug in pairs_sorted:
-        if info:
-            new_columns.append(info)
-        if debug:
-            new_columns.append(debug)
+    for col in df_result.columns:
+        if col in final_df.columns:
+            final_df[col] = df_result[col]
 
-    new_columns = [c for c in new_columns if c in df.columns]
+    st.success("✅ Process completed!")
 
-    df_new = df[new_columns]
+    st.dataframe(final_df)
 
-    st.write("### ✅ Result Preview")
-    st.dataframe(df_new.head())
-
-    # =========================
     # Download
-    # =========================
-    csv = df_new.to_csv(index=False).encode("utf-8")
+    output_file = "result.xlsx"
+    final_df.to_excel(output_file, index=False)
 
-    st.download_button(
-        label="📥 Download Sorted CSV",
-        data=csv,
-        file_name="sorted_columns.csv",
-        mime="text/csv",
-    )
+    with open(output_file, "rb") as f:
+        st.download_button("📥 Download Result", f, file_name=output_file)
+
+else:
+    st.info("👆 Upload all files to start")
