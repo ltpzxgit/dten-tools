@@ -4,6 +4,7 @@ import re
 REQ_ID_REGEX = r'Request ID:\s*([0-9a-fA-F\-]{36})'
 DT_REGEX = r'^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}'
 
+
 # =========================
 # COMMON
 # =========================
@@ -11,9 +12,11 @@ def extract_datetime(text):
     match = re.search(DT_REGEX, text)
     return match.group(0) if match else None
 
+
 def extract_request_id(text):
     match = re.search(REQ_ID_REGEX, text)
     return match.group(1) if match else None
+
 
 def extract_ldcm(text):
     if pd.isna(text):
@@ -22,10 +25,19 @@ def extract_ldcm(text):
     match = re.search(r'(\{?\"?LDCMLists.*)', text)
     return match.group(1) if match else ""
 
+
 def extract_all_device_ids(text):
     if pd.isna(text):
         return []
     return re.findall(r'\b[A-Z]{3}\d{5}\b', str(text))
+
+
+# 🔥 NEW
+def extract_quantity(text):
+    if pd.isna(text):
+        return None
+    match = re.search(r'Quantity\s*=\s*(\d+)', str(text))
+    return int(match.group(1)) if match else None
 
 
 # =========================
@@ -98,7 +110,7 @@ def process_dten_linkage(df_req, df_res):
 
 
 # =========================
-# SHEET 2 (🔥 แบบรูปตัง)
+# SHEET 2
 # =========================
 def process_device_list(df_req, df_linkage):
 
@@ -109,11 +121,9 @@ def process_device_list(df_req, df_linkage):
 
     for row in df_req["raw"]:
 
-        # Request ID
         if "INFO" in row and "Request ID" in row:
             current_req_id = extract_request_id(row)
 
-        # Request body → device หลายตัว
         elif "DEBUG" in row and "Request:" in row:
             devices = extract_all_device_ids(row)
 
@@ -125,16 +135,13 @@ def process_device_list(df_req, df_linkage):
 
     df_device = pd.DataFrame(records).drop_duplicates()
 
-    # =========================
-    # เติม fields
-    # =========================
     df_device["ProStatus"] = "PROD"
 
     df_device["Carrier"] = df_device["deviceId"].apply(
         lambda x: "AIS" if str(x).startswith("A") else "TRUE"
     )
 
-    # join result
+    # join response
     df_device = pd.merge(
         df_device,
         df_linkage[["Request ID", "Response"]],
@@ -142,8 +149,16 @@ def process_device_list(df_req, df_linkage):
         how="left"
     )
 
-    df_device["DTENLinkage Result"] = df_device["Response"].apply(
-        lambda x: "Process completed successfully" if "Quantity" in str(x) else ""
+    # 🔥 Quantity vs BYC
+    df_device["Quantity"] = df_device["Response"].apply(extract_quantity)
+
+    df_device["BYC_Count"] = df_device.groupby("Request ID")["deviceId"].transform("count")
+
+    df_device["DTENLinkage Result"] = df_device.apply(
+        lambda row: "✅ Match"
+        if row["Quantity"] == row["BYC_Count"]
+        else f"❌ Not Match ({row['BYC_Count']}/{row['Quantity']})",
+        axis=1
     )
 
     df_device = df_device.reset_index(drop=True)
