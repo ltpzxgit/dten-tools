@@ -22,15 +22,15 @@ def extract_ldcm(text):
     match = re.search(r'(\{?\"?LDCMLists.*)', text)
     return match.group(1) if match else ""
 
-def extract_device_id(text):
+# 🔥 ดึง deviceId ทุกตัว
+def extract_all_device_ids(text):
     if pd.isna(text):
-        return None
-    match = re.search(r'\b[A-Z]{3}\d{5}\b', str(text))
-    return match.group(0) if match else None
+        return []
+    return re.findall(r'\b[A-Z]{3}\d{5}\b', str(text))
 
 
 # =========================
-# SHEET 1
+# SHEET 1 (เหมือนเดิม)
 # =========================
 def process_dten_linkage(df_req, df_res):
 
@@ -57,7 +57,7 @@ def process_dten_linkage(df_req, df_res):
 
     df_req_clean = pd.DataFrame(records_req)
 
-    # ===== RESPONSE (smart pairing) =====
+    # ===== RESPONSE =====
     df_res["raw"] = df_res.apply(lambda r: " ".join(map(str, r.values)), axis=1)
 
     records_res = []
@@ -79,7 +79,6 @@ def process_dten_linkage(df_req, df_res):
 
     df_res_group = pd.DataFrame(records_res)
 
-    # ===== MERGE =====
     df_final = pd.merge(
         df_req_clean,
         df_res_group,
@@ -100,26 +99,70 @@ def process_dten_linkage(df_req, df_res):
 
 
 # =========================
-# SHEET 2
+# SHEET 2 (🔥 แบบที่ตังต้องการ)
 # =========================
-def process_device_list(df_req):
+def process_device_list(df_req, df_linkage):
 
     df_req["raw"] = df_req.apply(lambda r: " ".join(map(str, r.values)), axis=1)
 
-    df_req["deviceId"] = df_req["raw"].apply(extract_device_id)
+    records = []
+    current_req_id = None
 
-    df_device = df_req.dropna(subset=["deviceId"])[["deviceId"]].drop_duplicates()
+    for row in df_req["raw"]:
 
-    df_device = df_device.sort_values("deviceId").reset_index(drop=True)
+        # เจอ Request ID
+        if "INFO" in row and "Request ID" in row:
+            current_req_id = extract_request_id(row)
 
-    df_device["No."] = df_device.index + 1
+        # เจอ Request body → ดึง device ทั้งหมด
+        elif "DEBUG" in row and "Request:" in row:
+            devices = extract_all_device_ids(row)
 
+            for d in devices:
+                records.append({
+                    "Request ID": current_req_id,
+                    "deviceId": d
+                })
+
+    df_device = pd.DataFrame(records).drop_duplicates()
+
+    # =========================
+    # เติม ProStatus
+    # =========================
+    df_device["ProStatus"] = "PROD"
+
+    # =========================
+    # Carrier
+    # =========================
     df_device["Carrier"] = df_device["deviceId"].apply(
         lambda x: "AIS" if str(x).startswith("A") else "TRUE"
     )
 
+    # =========================
+    # Join Result จาก Sheet 1
+    # =========================
+    df_device = pd.merge(
+        df_device,
+        df_linkage[["Request ID", "Response"]],
+        on="Request ID",
+        how="left"
+    )
+
+    df_device["DTENLinkage Result"] = df_device["Response"].apply(
+        lambda x: "Process completed successfully" if "Quantity" in str(x) else ""
+    )
+
+    # =========================
+    # No.
+    # =========================
+    df_device = df_device.reset_index(drop=True)
+    df_device["No."] = df_device.index + 1
+
     return df_device[[
         "No.",
+        "Request ID",
         "deviceId",
-        "Carrier"
+        "ProStatus",
+        "Carrier",
+        "DTENLinkage Result"
     ]]
