@@ -55,7 +55,11 @@ if file_req and file_res:
         st.stop()
 
     try:
-        df_device = process_device_list(df_req.copy())
+        # 🔥 FIX ตรงนี้
+        df_device = process_device_list(
+            df_req.copy(),
+            df_linkage.copy()
+        )
     except Exception as e:
         st.error(f"❌ Device List Error: {e}")
         st.stop()
