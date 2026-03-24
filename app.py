@@ -14,13 +14,22 @@ template_file = st.file_uploader("📥 Upload Template File", type=["xlsx"])
 
 
 # =========================
-# Helper
+# Helper Functions
 # =========================
 def extract_device_id(text):
     if pd.isna(text):
         return None
-    match = re.search(r'[A-Z]{1,3}\d{5}', str(text))
+    text = str(text)
+    match = re.search(r'\b[A-Z]{1,4}\d{4,8}\b', text)
     return match.group(0) if match else None
+
+
+def extract_device_from_row(row):
+    for val in row:
+        device = extract_device_id(val)
+        if device:
+            return device
+    return None
 
 
 # =========================
@@ -33,14 +42,16 @@ if dten_file and tcap_file and template_file:
     df_tcap = pd.read_csv(tcap_file) if tcap_file.name.endswith("csv") else pd.read_excel(tcap_file)
     df_template = pd.read_excel(template_file)
 
-    # --- Clean column name ---
+    # --- Clean header ---
     df_template.columns = df_template.columns.str.strip()
 
     # =========================
-    # Extract Device ID
+    # Extract Device ID (DTEN)
     # =========================
-    df_dten["deviceId"] = df_dten.astype(str).apply(lambda row: extract_device_id(" ".join(row)), axis=1)
+    df_dten["deviceId"] = df_dten.apply(extract_device_from_row, axis=1)
     df_dten = df_dten.dropna(subset=["deviceId"])
+
+    st.write(f"🔍 Found Devices (DTEN): {df_dten['deviceId'].nunique()}")
 
     # =========================
     # Build Result Table
@@ -62,10 +73,14 @@ if dten_file and tcap_file and template_file:
     df_result["DTENLinkage Result"] = df_result["deviceId"].map(result_map)
 
     # =========================
-    # TCAP Check
+    # Extract Device ID (TCAP)
     # =========================
-    df_tcap["deviceId"] = df_tcap.astype(str).apply(lambda row: extract_device_id(" ".join(row)), axis=1)
-    tcap_set = set(df_tcap["deviceId"].dropna())
+    df_tcap["deviceId"] = df_tcap.apply(extract_device_from_row, axis=1)
+    df_tcap = df_tcap.dropna(subset=["deviceId"])
+
+    st.write(f"🔍 Found Devices (TCAP): {df_tcap['deviceId'].nunique()}")
+
+    tcap_set = set(df_tcap["deviceId"])
 
     df_result["DTENTCAPLinkage"] = df_result["deviceId"].apply(
         lambda x: "Yes" if x in tcap_set else "No"
@@ -81,7 +96,7 @@ if dten_file and tcap_file and template_file:
     df_result["received from AIS"] = df_result["sent to AIS"]
 
     # =========================
-    # 🔒 FIX TEMPLATE (สำคัญสุด)
+    # 🔒 FIX TEMPLATE STRUCTURE
     # =========================
     final_df = df_template.copy()
 
@@ -98,7 +113,7 @@ if dten_file and tcap_file and template_file:
                         final_df.at[idx, col] = result_map_full[device][col]
 
     else:
-        st.warning("⚠️ Template ไม่มี column deviceId → ใช้ append แทน")
+        st.warning("⚠️ Template ไม่มี deviceId → ใช้ append")
         final_df = pd.concat([final_df, df_result], ignore_index=True)
 
     # =========================
@@ -108,7 +123,7 @@ if dten_file and tcap_file and template_file:
     if missing:
         st.warning(f"⚠️ Missing devices in template: {len(missing)}")
 
-    # lock column order
+    # Lock column order
     final_df = final_df[df_template.columns]
 
     # =========================
