@@ -22,7 +22,6 @@ def extract_ldcm(text):
     match = re.search(r'(\{?\"?LDCMLists.*)', text)
     return match.group(1) if match else ""
 
-# 🔥 ดึง deviceId ทุกตัว
 def extract_all_device_ids(text):
     if pd.isna(text):
         return []
@@ -30,7 +29,7 @@ def extract_all_device_ids(text):
 
 
 # =========================
-# SHEET 1 (เหมือนเดิม)
+# SHEET 1
 # =========================
 def process_dten_linkage(df_req, df_res):
 
@@ -99,7 +98,7 @@ def process_dten_linkage(df_req, df_res):
 
 
 # =========================
-# SHEET 2 (🔥 แบบที่ตังต้องการ)
+# SHEET 2 (🔥 แบบรูปตัง)
 # =========================
 def process_device_list(df_req, df_linkage):
 
@@ -110,11 +109,11 @@ def process_device_list(df_req, df_linkage):
 
     for row in df_req["raw"]:
 
-        # เจอ Request ID
+        # Request ID
         if "INFO" in row and "Request ID" in row:
             current_req_id = extract_request_id(row)
 
-        # เจอ Request body → ดึง device ทั้งหมด
+        # Request body → device หลายตัว
         elif "DEBUG" in row and "Request:" in row:
             devices = extract_all_device_ids(row)
 
@@ -127,20 +126,15 @@ def process_device_list(df_req, df_linkage):
     df_device = pd.DataFrame(records).drop_duplicates()
 
     # =========================
-    # เติม ProStatus
+    # เติม fields
     # =========================
     df_device["ProStatus"] = "PROD"
 
-    # =========================
-    # Carrier
-    # =========================
     df_device["Carrier"] = df_device["deviceId"].apply(
         lambda x: "AIS" if str(x).startswith("A") else "TRUE"
     )
 
-    # =========================
-    # Join Result จาก Sheet 1
-    # =========================
+    # join result
     df_device = pd.merge(
         df_device,
         df_linkage[["Request ID", "Response"]],
@@ -152,9 +146,6 @@ def process_device_list(df_req, df_linkage):
         lambda x: "Process completed successfully" if "Quantity" in str(x) else ""
     )
 
-    # =========================
-    # No.
-    # =========================
     df_device = df_device.reset_index(drop=True)
     df_device["No."] = df_device.index + 1
 
