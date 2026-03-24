@@ -4,6 +4,9 @@ import re
 REQ_ID_REGEX = r'Request ID:\s*([0-9a-fA-F\-]{36})'
 DT_REGEX = r'^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}'
 
+# =========================
+# COMMON FUNCTIONS
+# =========================
 def extract_datetime(text):
     match = re.search(DT_REGEX, text)
     return match.group(0) if match else None
@@ -19,16 +22,25 @@ def extract_ldcm(text):
     match = re.search(r'(\{?\"?LDCMLists.*)', text)
     return match.group(1) if match else ""
 
-# 🔥 main function
+def extract_device_id(text):
+    if pd.isna(text):
+        return None
+    match = re.search(r'\b[A-Z]{3}\d{5}\b', str(text))
+    return match.group(0) if match else None
+
+
+# =========================
+# SHEET 1: DTEN LINKAGE
+# =========================
 def process_dten_linkage(df_req, df_res):
 
-    # ===== REQUEST =====
     df_req["raw"] = df_req.apply(lambda r: " ".join(map(str, r.values)), axis=1)
 
     records_req = []
     current = {}
 
     for row in df_req["raw"]:
+
         if "INFO" in row and "Request ID" in row:
             if current:
                 records_req.append(current)
@@ -52,6 +64,7 @@ def process_dten_linkage(df_req, df_res):
     last_response = None
 
     for row in df_res["raw"]:
+
         if "Response:" in row:
             last_response = extract_ldcm(row)
 
@@ -83,4 +96,30 @@ def process_dten_linkage(df_req, df_res):
         "Request ID",
         "Request",
         "Response"
+    ]]
+
+
+# =========================
+# SHEET 2: DEVICE LIST
+# =========================
+def process_device_list(df_req):
+
+    df_req["raw"] = df_req.apply(lambda r: " ".join(map(str, r.values)), axis=1)
+
+    df_req["deviceId"] = df_req["raw"].apply(extract_device_id)
+
+    df_device = df_req.dropna(subset=["deviceId"])[["deviceId"]].drop_duplicates()
+
+    df_device = df_device.sort_values("deviceId").reset_index(drop=True)
+
+    df_device["No."] = df_device.index + 1
+
+    df_device["Carrier"] = df_device["deviceId"].apply(
+        lambda x: "AIS" if str(x).startswith("A") else "TRUE"
+    )
+
+    return df_device[[
+        "No.",
+        "deviceId",
+        "Carrier"
     ]]
