@@ -3,22 +3,15 @@ import pandas as pd
 import re
 from io import BytesIO
 
-st.set_page_config(page_title="DTEN Processor", layout="wide")
-st.title("🔥 DTEN Processor (Template Locked)")
+st.set_page_config(page_title="DTEN Linkage Tool", layout="wide")
+st.title("🔥 DTEN Linkage Processor (Match Final)")
 
 # =========================
 # Upload Files
 # =========================
-uploaded_files = st.file_uploader(
-    "📥 Upload Raw Files (1-8)",
-    type=["csv", "xlsx"],
-    accept_multiple_files=True
-)
+file_req = st.file_uploader("📥 Upload File 1 (Request)", type=["csv", "xlsx"])
+file_res = st.file_uploader("📥 Upload File 2 (Response)", type=["csv", "xlsx"])
 
-template_file = st.file_uploader(
-    "📥 Upload Template File",
-    type=["xlsx"]
-)
 
 # =========================
 # Extract Functions
@@ -37,7 +30,7 @@ def extract_request_id(text):
     return match.group(0) if match else None
 
 
-def extract_row(row):
+def extract_from_row(row):
     device = None
     request = None
 
@@ -53,78 +46,72 @@ def extract_row(row):
 # =========================
 # Process
 # =========================
-if uploaded_files and template_file:
+if file_req and file_res:
 
-    all_df = []
-
-    for file in uploaded_files:
-        try:
-            df = pd.read_csv(file) if file.name.endswith("csv") else pd.read_excel(file)
-        except Exception as e:
-            st.error(f"❌ อ่านไฟล์ {file.name} ไม่ได้: {e}")
-            continue
-
-        # Extract
-        extracted = df.apply(extract_row, axis=1)
-        extracted.columns = ["deviceId", "RequestId"]
-
-        df["deviceId"] = extracted["deviceId"]
-        df["RequestId"] = extracted["RequestId"]
-
-        df = df.dropna(subset=["deviceId"])
-
-        # raw text
-        df["raw_text"] = df.apply(
-            lambda row: " ".join([str(x) for x in row.values]),
-            axis=1
-        )
-
-        all_df.append(df)
-
-    if not all_df:
-        st.error("❌ ไม่มีข้อมูล usable")
-        st.stop()
-
-    df_all = pd.concat(all_df, ignore_index=True)
-
-    st.write(f"🔍 Devices Found: {df_all['deviceId'].nunique()}")
+    # ===== Read Files =====
+    df_req = pd.read_csv(file_req) if file_req.name.endswith("csv") else pd.read_excel(file_req)
+    df_res = pd.read_csv(file_res) if file_res.name.endswith("csv") else pd.read_excel(file_res)
 
     # =========================
-    # Build Result (DATA ONLY)
+    # Extract Request File
     # =========================
-    devices = sorted(df_all["deviceId"].unique())
+    extracted_req = df_req.apply(extract_from_row, axis=1)
+    extracted_req.columns = ["deviceId", "RequestId"]
 
-    df_result = pd.DataFrame({
-        "No.": range(1, len(devices) + 1),
-        "deviceId": devices
-    })
+    df_req["deviceId"] = extracted_req["deviceId"]
+    df_req["RequestId"] = extracted_req["RequestId"]
 
-    # RequestId ล่าสุด
-    req_map = df_all.groupby("deviceId")["RequestId"].last().to_dict()
-    df_result["RequestId"] = df_result["deviceId"].map(req_map)
+    df_req = df_req.dropna(subset=["deviceId", "RequestId"])
 
-    # ProStatus
+    # =========================
+    # Extract Response File
+    # =========================
+    df_res["RequestId"] = df_res.apply(
+        lambda row: extract_request_id(" ".join(map(str, row.values))),
+        axis=1
+    )
+
+    df_res["Result"] = df_res.apply(
+        lambda row: " ".join(map(str, row.values)),
+        axis=1
+    )
+
+    df_res = df_res.dropna(subset=["RequestId"])
+
+    # =========================
+    # 🔥 MERGE (หัวใจ)
+    # =========================
+    df_merge = pd.merge(
+        df_req,
+        df_res[["RequestId", "Result"]],
+        on="RequestId",
+        how="left"
+    )
+
+    st.write(f"🔍 Devices Found: {df_merge['deviceId'].nunique()}")
+
+    # =========================
+    # Group → 1 device ต่อ 1 row
+    # =========================
+    df_result = df_merge.groupby("deviceId").agg({
+        "RequestId": "last",
+        "Result": "last"
+    }).reset_index()
+
+    # =========================
+    # Apply Business Logic
+    # =========================
+    df_result = df_result.sort_values("deviceId").reset_index(drop=True)
+
+    df_result["No."] = df_result.index + 1
     df_result["ProStatus"] = "PROD"
 
-    # Carrier
     df_result["Carrier"] = df_result["deviceId"].apply(
         lambda x: "AIS" if str(x).startswith("A") else "TRUE"
     )
 
-    # DTEN Result
-    result_map = df_all.groupby("deviceId")["raw_text"].last().to_dict()
-    df_result["DTENLinkage Result"] = df_result["deviceId"].map(result_map)
+    df_result["DTENLinkage Result"] = df_result["Result"]
 
-    # TCAP
-    tcap_devices = set(
-        df_all[df_all["raw_text"].str.contains("TCAP", na=False)]["deviceId"]
-    )
-
-    df_result["DTENTCAPLinkage"] = df_result["deviceId"].apply(
-        lambda x: "Yes" if x in tcap_devices else "No"
-    )
-
-    # AIS logic
     df_result["sent to AIS"] = df_result["Carrier"].apply(
         lambda x: "Yes" if x == "AIS" else "No"
     )
@@ -132,46 +119,40 @@ if uploaded_files and template_file:
     df_result["received from AIS"] = df_result["sent to AIS"]
 
     # =========================
-    # 🔥 APPLY TO TEMPLATE
+    # Final Column Order (เหมือน sheet)
     # =========================
-    df_template = pd.read_excel(template_file)
+    final_cols = [
+        "No.",
+        "deviceId",
+        "RequestId",
+        "ProStatus",
+        "Carrier",
+        "DTENLinkage Result",
+        "sent to AIS",
+        "received from AIS"
+    ]
 
-    df_template.columns = df_template.columns.str.strip()
-    df_result.columns = df_result.columns.str.strip()
-
-    final_df = df_template.copy()
-
-    result_map_full = df_result.set_index("deviceId").to_dict(orient="index")
-
-    for idx, row in final_df.iterrows():
-        device = str(row.get("deviceId", "")).strip()
-
-        if device in result_map_full:
-            data = result_map_full[device]
-
-            for col in final_df.columns:
-                if col in data:
-                    final_df.at[idx, col] = data[col]
+    df_result = df_result[final_cols]
 
     # =========================
-    # Output
+    # Show Result
     # =========================
-    st.success("✅ DONE (Template Preserved 100%)")
-    st.dataframe(final_df, use_container_width=True)
+    st.success("✅ Result Matched (DTEN Linkage)")
+    st.dataframe(df_result, use_container_width=True)
 
     # =========================
-    # Download (FIX .bin)
+    # Download (ไม่เป็น .bin)
     # =========================
     output = BytesIO()
-    final_df.to_excel(output, index=False)
+    df_result.to_excel(output, index=False)
     output.seek(0)
 
     st.download_button(
-        label="📥 Download Final Result",
+        label="📥 Download DTEN Linkage Result",
         data=output,
-        file_name="final_result.xlsx",
+        file_name="DTEN_Linkage_Result.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
 
 else:
-    st.info("👆 Upload Raw Files + Template to start")
+    st.info("👆 Upload Request + Response Files")
