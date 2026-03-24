@@ -106,13 +106,15 @@ def process_dten_linkage(df_req, df_res):
 # =========================
 def process_device_list(df_req, df_linkage):
 
-    # 🔥 รวม req + response
+    import re
+
+    # รวม req + response
     df_all = pd.concat([
         df_req.copy(),
         df_linkage[["Request ID", "Response"]].rename(columns={"Response": "raw"})
     ], ignore_index=True)
 
-    # 🔥 ทำ raw text
+    # build raw
     if "raw" not in df_all.columns:
         df_all["raw"] = df_all.apply(lambda r: " ".join(map(str, r.values)), axis=1)
     else:
@@ -123,13 +125,13 @@ def process_device_list(df_req, df_linkage):
 
     for row in df_all["raw"]:
 
-        # 🔥 sticky request id (สำคัญมาก)
+        # 🔥 sticky request id
         req_id = extract_request_id(row)
         if req_id:
             current_req_id = req_id
 
-        # 🔥 regex flexible ขึ้น
-        devices = re.findall(r'[A-Z]{3}\d{5,}', str(row))
+        # 🔥 FIX regex ตาม spec จริง
+        devices = re.findall(r'\b[A-Z]{3}\d{5}\b', str(row))
 
         for d in devices:
             if current_req_id:
@@ -138,20 +140,19 @@ def process_device_list(df_req, df_linkage):
                     "deviceId": d
                 })
 
-    # 🔥 ห้าม drop duplicates ตอนนี้ (ต้อง match Quantity)
     df_device = pd.DataFrame(records)
 
     # =========================
-    # Basic fields
+    # fields
     # =========================
     df_device["ProStatus"] = "PROD"
 
     df_device["Carrier"] = df_device["deviceId"].apply(
-        lambda x: "AIS" if str(x).startswith("A") else "TRUE"
+        lambda x: "AIS" if x.startswith("A") else "TRUE"
     )
 
     # =========================
-    # JOIN Response
+    # join response
     # =========================
     df_device = pd.merge(
         df_device,
@@ -161,7 +162,7 @@ def process_device_list(df_req, df_linkage):
     )
 
     # =========================
-    # 🔥 Success count (รองรับติดกัน)
+    # success count
     # =========================
     def count_success(text):
         if pd.isna(text):
@@ -171,12 +172,12 @@ def process_device_list(df_req, df_linkage):
     df_device["Success_Count"] = df_device["Response"].apply(count_success)
 
     # =========================
-    # 🔥 BYC count (จำนวน device จริง)
+    # BYC count
     # =========================
     df_device["BYC_Count"] = df_device.groupby("Request ID")["deviceId"].transform("count")
 
     # =========================
-    # 🔥 RESULT
+    # RESULT
     # =========================
     df_device["DTENLinkage Result"] = df_device.apply(
         lambda row: "✅ Match"
