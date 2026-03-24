@@ -4,7 +4,7 @@ import re
 from io import BytesIO
 
 st.set_page_config(page_title="DTEN Linkage Tool", layout="wide")
-st.title("🔥 DTEN Linkage (FINAL VERSION)")
+st.title("🔥 DTEN Linkage (FINAL - Response Fixed)")
 
 # =========================
 # Upload
@@ -16,6 +16,7 @@ file_res = st.file_uploader("📥 Upload File 2 (Response)", type=["csv", "xlsx"
 # Regex
 # =========================
 REQ_ID_REGEX = r'Request ID:\s*([0-9a-fA-F\-]{36})'
+GUID_REGEX = r'\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b'
 DT_REGEX = r'^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}'
 
 # =========================
@@ -29,13 +30,14 @@ def extract_request_id(text):
     match = re.search(REQ_ID_REGEX, text)
     return match.group(1) if match else None
 
+def extract_guid(text):
+    match = re.search(GUID_REGEX, str(text))
+    return match.group(0) if match else None
+
 def extract_ldcm(text):
     if pd.isna(text):
         return ""
-
-    text = str(text)
-    text = text.replace('"""', '"')
-
+    text = str(text).replace('"""', '"')
     match = re.search(r'(\{?\"?LDCMLists.*)', text)
     return match.group(1) if match else ""
 
@@ -77,11 +79,16 @@ if file_req and file_res:
     df_req_clean = pd.DataFrame(records)
 
     # =========================
-    # RESPONSE
+    # RESPONSE (🔥 FIXED)
     # =========================
     df_res["raw"] = df_res.apply(lambda r: " ".join(map(str, r.values)), axis=1)
 
-    df_res["Request ID"] = df_res["raw"].apply(extract_request_id)
+    # 👉 ใช้ GUID แทน Request ID
+    df_res["Request ID"] = df_res["raw"].apply(extract_guid)
+
+    # 👉 เอาเฉพาะที่มี LDCMLists (กัน noise)
+    df_res = df_res[df_res["raw"].str.contains("LDCMLists", na=False)]
+
     df_res["Response"] = df_res["raw"].apply(extract_ldcm)
 
     df_res = df_res.dropna(subset=["Request ID"])
@@ -101,7 +108,7 @@ if file_req and file_res:
     )
 
     # =========================
-    # 🔥 SORT ใหม่สุดอยู่บน
+    # SORT ใหม่สุดอยู่บน
     # =========================
     df_final = df_final.sort_values("date", ascending=False).reset_index(drop=True)
 
@@ -122,9 +129,15 @@ if file_req and file_res:
     ]]
 
     # =========================
+    # Debug
+    # =========================
+    st.write("🔍 Sample Response:")
+    st.write(df_final[["Request ID", "Response"]].head(5))
+
+    # =========================
     # Show
     # =========================
-    st.success("✅ DONE (Newest on top + Response OK)")
+    st.success("✅ DONE (Response มาแล้ว + Newest on top)")
     st.dataframe(df_final, use_container_width=True)
 
     # =========================
