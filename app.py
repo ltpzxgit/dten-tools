@@ -34,13 +34,9 @@ def extract_ldcm(text):
         return ""
 
     text = str(text)
-
-    # clean quote ซ้อน
     text = text.replace('"""', '"')
 
-    # ดึงตั้งแต่ LDCMLists
     match = re.search(r'(\{?\"?LDCMLists.*)', text)
-
     return match.group(1) if match else ""
 
 def read_file(f):
@@ -55,7 +51,7 @@ if file_req and file_res:
     df_res = read_file(file_res)
 
     # =========================
-    # REQUEST (INFO + DEBUG pairing)
+    # REQUEST (INFO + DEBUG)
     # =========================
     df_req["raw"] = df_req.apply(lambda r: " ".join(map(str, r.values)), axis=1)
 
@@ -64,9 +60,7 @@ if file_req and file_res:
 
     for row in df_req["raw"]:
 
-        # INFO = start
         if "INFO" in row and "Request ID" in row:
-
             if current:
                 records.append(current)
                 current = {}
@@ -74,7 +68,6 @@ if file_req and file_res:
             current["Request ID"] = extract_request_id(row)
             current["date"] = extract_datetime(row)
 
-        # DEBUG = request body
         elif "DEBUG" in row and "Request:" in row:
             current["Request"] = extract_ldcm(row)
 
@@ -108,13 +101,17 @@ if file_req and file_res:
     )
 
     # =========================
-    # Sort + No.
+    # 🔥 SORT ใหม่สุดอยู่บน
     # =========================
-    df_final = df_final.sort_values("date").reset_index(drop=True)
+    df_final = df_final.sort_values("date", ascending=False).reset_index(drop=True)
+
+    # =========================
+    # Add No.
+    # =========================
     df_final["No."] = df_final.index + 1
 
     # =========================
-    # Final Format
+    # Final Columns
     # =========================
     df_final = df_final[[
         "No.",
@@ -127,7 +124,7 @@ if file_req and file_res:
     # =========================
     # Show
     # =========================
-    st.success("✅ DONE (เหมือน final แล้ว)")
+    st.success("✅ DONE (Newest on top + Response OK)")
     st.dataframe(df_final, use_container_width=True)
 
     # =========================
