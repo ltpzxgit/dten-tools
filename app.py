@@ -15,41 +15,44 @@ file_res = st.file_uploader("📥 Upload File 2 (Response)", type=["csv", "xlsx"
 # =========================
 # Extract Functions
 # =========================
+GUID_REGEX = r'\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b'
+DT_REGEX = r'\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2}'
+
 def extract_request_id(text):
     if pd.isna(text):
         return None
-    
-    match = re.search(
-        r'\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b',
-        str(text)
-    )
-    return match.group(0) if match else None
-
+    m = re.search(GUID_REGEX, str(text))
+    return m.group(0) if m else None
 
 def extract_datetime(text):
     if pd.isna(text):
-        return None
-    
-    match = re.search(r'\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2}', str(text))
-    return match.group(0) if match else None
-
+        return pd.NaT
+    m = re.search(DT_REGEX, str(text))
+    if not m:
+        return pd.NaT
+    # แปลงเป็น datetime จริง
+    try:
+        return pd.to_datetime(m.group(0), format="%Y/%m/%d %H:%M:%S", errors="coerce")
+    except:
+        return pd.NaT
 
 def cut_ldcm(text):
     if pd.isna(text):
         return ""
-    
     text = str(text)
     idx = text.find("LDCMLists")
     return text[idx:] if idx != -1 else ""
 
+def read_file(f):
+    return pd.read_csv(f) if f.name.endswith("csv") else pd.read_excel(f)
 
 # =========================
 # Process
 # =========================
 if file_req and file_res:
 
-    df_req = pd.read_csv(file_req) if file_req.name.endswith("csv") else pd.read_excel(file_req)
-    df_res = pd.read_csv(file_res) if file_res.name.endswith("csv") else pd.read_excel(file_res)
+    df_req = read_file(file_req)
+    df_res = read_file(file_res)
 
     # =========================
     # REQUEST
@@ -62,11 +65,14 @@ if file_req and file_res:
 
     df_req = df_req.dropna(subset=["Request ID"])
 
-    # 🔥 รวม Request (group by Request ID)
+    # 🔥 รวม Request ต่อ Request ID (เอาเวลา earliest)
     df_req_group = df_req.groupby("Request ID").agg({
-        "date": "first",
+        "date": "min",  # สำคัญ: ใช้เวลาที่ถูกที่สุด (earliest)
         "Request": lambda x: " ".join([i for i in x if i])
     }).reset_index()
+
+    # format datetime กลับเป็น string แบบ Excel
+    df_req_group["date"] = df_req_group["date"].dt.strftime("%Y/%m/%d %H:%M:%S")
 
     # =========================
     # RESPONSE
@@ -78,7 +84,7 @@ if file_req and file_res:
 
     df_res = df_res.dropna(subset=["Request ID"])
 
-    # 🔥 รวม Response
+    # 🔥 รวม Response ต่อ Request ID
     df_res_group = df_res.groupby("Request ID").agg({
         "Response": lambda x: " ".join([i for i in x if i])
     }).reset_index()
@@ -94,9 +100,12 @@ if file_req and file_res:
     )
 
     # =========================
-    # Add No.
+    # Add No. + Sort by datetime
     # =========================
-    df_final = df_final.reset_index(drop=True)
+    # แปลง date กลับเป็น datetime ชั่วคราวเพื่อ sort
+    df_final["_dt"] = pd.to_datetime(df_final["date"], errors="coerce")
+    df_final = df_final.sort_values("_dt").drop(columns=["_dt"]).reset_index(drop=True)
+
     df_final["No."] = df_final.index + 1
 
     # =========================
@@ -113,11 +122,11 @@ if file_req and file_res:
     # =========================
     # Show
     # =========================
-    st.success("✅ Final Result (ตรง manual แล้ว)")
+    st.success("✅ Final Result (datetime ถูก + ตรง manual)")
     st.dataframe(df_final, use_container_width=True)
 
     # =========================
-    # Download (ไม่เป็น .bin)
+    # Download (.xlsx ชัวร์)
     # =========================
     output = BytesIO()
     df_final.to_excel(output, index=False)
