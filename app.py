@@ -3,8 +3,8 @@ import pandas as pd
 import re
 from io import BytesIO
 
-st.set_page_config(page_title="DTEN Full Processor", layout="wide")
-st.title("🔥 DTEN Full Processor (Stable + Clean Download)")
+st.set_page_config(page_title="DTEN Processor", layout="wide")
+st.title("🔥 DTEN Processor (Template Locked)")
 
 # =========================
 # Upload Files
@@ -13,6 +13,11 @@ uploaded_files = st.file_uploader(
     "📥 Upload Raw Files (1-8)",
     type=["csv", "xlsx"],
     accept_multiple_files=True
+)
+
+template_file = st.file_uploader(
+    "📥 Upload Template File",
+    type=["xlsx"]
 )
 
 # =========================
@@ -48,7 +53,7 @@ def extract_row(row):
 # =========================
 # Process
 # =========================
-if uploaded_files:
+if uploaded_files and template_file:
 
     all_df = []
 
@@ -59,7 +64,7 @@ if uploaded_files:
             st.error(f"❌ อ่านไฟล์ {file.name} ไม่ได้: {e}")
             continue
 
-        # ===== Extract =====
+        # Extract
         extracted = df.apply(extract_row, axis=1)
         extracted.columns = ["deviceId", "RequestId"]
 
@@ -68,7 +73,7 @@ if uploaded_files:
 
         df = df.dropna(subset=["deviceId"])
 
-        # ===== FIX raw_text (ไม่ใช้ agg แล้ว) =====
+        # raw text
         df["raw_text"] = df.apply(
             lambda row: " ".join([str(x) for x in row.values]),
             axis=1
@@ -85,7 +90,7 @@ if uploaded_files:
     st.write(f"🔍 Devices Found: {df_all['deviceId'].nunique()}")
 
     # =========================
-    # Build Result
+    # Build Result (DATA ONLY)
     # =========================
     devices = sorted(df_all["deviceId"].unique())
 
@@ -94,7 +99,7 @@ if uploaded_files:
         "deviceId": devices
     })
 
-    # Request ล่าสุด
+    # RequestId ล่าสุด
     req_map = df_all.groupby("deviceId")["RequestId"].last().to_dict()
     df_result["RequestId"] = df_result["deviceId"].map(req_map)
 
@@ -106,11 +111,11 @@ if uploaded_files:
         lambda x: "AIS" if str(x).startswith("A") else "TRUE"
     )
 
-    # Result ล่าสุด
+    # DTEN Result
     result_map = df_all.groupby("deviceId")["raw_text"].last().to_dict()
     df_result["DTENLinkage Result"] = df_result["deviceId"].map(result_map)
 
-    # TCAP detection
+    # TCAP
     tcap_devices = set(
         df_all[df_all["raw_text"].str.contains("TCAP", na=False)]["deviceId"]
     )
@@ -127,16 +132,38 @@ if uploaded_files:
     df_result["received from AIS"] = df_result["sent to AIS"]
 
     # =========================
-    # Show Result
+    # 🔥 APPLY TO TEMPLATE
     # =========================
-    st.success("✅ DONE (Download will be .xlsx)")
-    st.dataframe(df_result, use_container_width=True)
+    df_template = pd.read_excel(template_file)
+
+    df_template.columns = df_template.columns.str.strip()
+    df_result.columns = df_result.columns.str.strip()
+
+    final_df = df_template.copy()
+
+    result_map_full = df_result.set_index("deviceId").to_dict(orient="index")
+
+    for idx, row in final_df.iterrows():
+        device = str(row.get("deviceId", "")).strip()
+
+        if device in result_map_full:
+            data = result_map_full[device]
+
+            for col in final_df.columns:
+                if col in data:
+                    final_df.at[idx, col] = data[col]
 
     # =========================
-    # 🔥 FIX DOWNLOAD (สำคัญสุด)
+    # Output
+    # =========================
+    st.success("✅ DONE (Template Preserved 100%)")
+    st.dataframe(final_df, use_container_width=True)
+
+    # =========================
+    # Download (FIX .bin)
     # =========================
     output = BytesIO()
-    df_result.to_excel(output, index=False)
+    final_df.to_excel(output, index=False)
     output.seek(0)
 
     st.download_button(
@@ -147,4 +174,4 @@ if uploaded_files:
     )
 
 else:
-    st.info("👆 Upload files to start")
+    st.info("👆 Upload Raw Files + Template to start")
