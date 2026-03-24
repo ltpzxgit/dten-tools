@@ -32,14 +32,6 @@ def extract_all_device_ids(text):
     return re.findall(r'\b[A-Z]{3}\d{5}\b', str(text))
 
 
-# 🔥 NEW
-def extract_quantity(text):
-    if pd.isna(text):
-        return None
-    match = re.search(r'Quantity\s*=\s*(\d+)', str(text))
-    return int(match.group(1)) if match else None
-
-
 # =========================
 # SHEET 1
 # =========================
@@ -110,7 +102,7 @@ def process_dten_linkage(df_req, df_res):
 
 
 # =========================
-# SHEET 2
+# SHEET 2 (🔥 FIX ใหม่จริง)
 # =========================
 def process_device_list(df_req, df_linkage):
 
@@ -121,27 +113,33 @@ def process_device_list(df_req, df_linkage):
 
     for row in df_req["raw"]:
 
+        # 🔹 หา Request ID
         if "INFO" in row and "Request ID" in row:
             current_req_id = extract_request_id(row)
 
-        elif "DEBUG" in row and "Request:" in row:
-            devices = extract_all_device_ids(row)
+        # 🔹 ดึง device ทุกบรรทัด (สำคัญ)
+        devices = extract_all_device_ids(row)
 
-            for d in devices:
-                records.append({
-                    "Request ID": current_req_id,
-                    "deviceId": d
-                })
+        for d in devices:
+            records.append({
+                "Request ID": current_req_id,
+                "deviceId": d
+            })
 
     df_device = pd.DataFrame(records).drop_duplicates()
 
+    # =========================
+    # Basic fields
+    # =========================
     df_device["ProStatus"] = "PROD"
 
     df_device["Carrier"] = df_device["deviceId"].apply(
         lambda x: "AIS" if str(x).startswith("A") else "TRUE"
     )
 
-    # join response
+    # =========================
+    # JOIN Response
+    # =========================
     df_device = pd.merge(
         df_device,
         df_linkage[["Request ID", "Response"]],
@@ -149,15 +147,28 @@ def process_device_list(df_req, df_linkage):
         how="left"
     )
 
-    # 🔥 Quantity vs BYC
-    df_device["Quantity"] = df_device["Response"].apply(extract_quantity)
+    # =========================
+    # 🔥 Success count (รองรับติดกัน)
+    # =========================
+    def count_success(text):
+        if pd.isna(text):
+            return 0
+        return str(text).count("Process completed successfully")
 
+    df_device["Success_Count"] = df_device["Response"].apply(count_success)
+
+    # =========================
+    # 🔥 BYC count
+    # =========================
     df_device["BYC_Count"] = df_device.groupby("Request ID")["deviceId"].transform("count")
 
+    # =========================
+    # 🔥 RESULT
+    # =========================
     df_device["DTENLinkage Result"] = df_device.apply(
         lambda row: "✅ Match"
-        if row["Quantity"] == row["BYC_Count"]
-        else f"❌ Not Match ({row['BYC_Count']}/{row['Quantity']})",
+        if row["Success_Count"] >= row["BYC_Count"]
+        else f"❌ Not Match ({row['Success_Count']}/{row['BYC_Count']})",
         axis=1
     )
 
