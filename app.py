@@ -3,8 +3,8 @@ import pandas as pd
 import re
 from io import BytesIO
 
-st.set_page_config(page_title="DTEN Linkage Table", layout="wide")
-st.title("🔥 DTEN Linkage (Clean + Match Final)")
+st.set_page_config(page_title="DTEN Linkage Tool", layout="wide")
+st.title("🔥 DTEN Linkage (Auto Combine → Final Result)")
 
 # =========================
 # Upload
@@ -32,10 +32,10 @@ def extract_datetime(text):
 
 def cut_ldcm(text):
     if pd.isna(text):
-        return None
+        return ""
     text = str(text)
     idx = text.find("LDCMLists")
-    return text[idx:] if idx != -1 else text
+    return text[idx:] if idx != -1 else ""
 
 
 # =========================
@@ -47,7 +47,7 @@ if file_req and file_res:
     df_res = pd.read_csv(file_res) if file_res.name.endswith("csv") else pd.read_excel(file_res)
 
     # =========================
-    # Request
+    # REQUEST
     # =========================
     df_req["raw"] = df_req.apply(lambda r: " ".join(map(str, r.values)), axis=1)
 
@@ -57,8 +57,14 @@ if file_req and file_res:
 
     df_req = df_req.dropna(subset=["Request ID"])
 
+    # 🔥 รวม Request (สำคัญ)
+    df_req_group = df_req.groupby("Request ID").agg({
+        "date": "first",
+        "Request": lambda x: " ".join([i for i in x if i])
+    }).reset_index()
+
     # =========================
-    # Response
+    # RESPONSE
     # =========================
     df_res["raw"] = df_res.apply(lambda r: " ".join(map(str, r.values)), axis=1)
 
@@ -67,12 +73,17 @@ if file_req and file_res:
 
     df_res = df_res.dropna(subset=["Request ID"])
 
+    # 🔥 รวม Response
+    df_res_group = df_res.groupby("Request ID").agg({
+        "Response": lambda x: " ".join([i for i in x if i])
+    }).reset_index()
+
     # =========================
-    # Merge
+    # MERGE
     # =========================
-    df_merge = pd.merge(
-        df_req[["Request ID", "date", "Request"]],
-        df_res[["Request ID", "Response"]],
+    df_final = pd.merge(
+        df_req_group,
+        df_res_group,
         on="Request ID",
         how="left"
     )
@@ -80,13 +91,13 @@ if file_req and file_res:
     # =========================
     # Add No.
     # =========================
-    df_merge = df_merge.reset_index(drop=True)
-    df_merge["No."] = df_merge.index + 1
+    df_final = df_final.reset_index(drop=True)
+    df_final["No."] = df_final.index + 1
 
     # =========================
-    # Final Format
+    # Arrange Columns
     # =========================
-    df_merge = df_merge[[
+    df_final = df_final[[
         "No.",
         "date",
         "Request ID",
@@ -97,20 +108,20 @@ if file_req and file_res:
     # =========================
     # Show
     # =========================
-    st.success("✅ DTEN Linkage (Clean แล้ว)")
-    st.dataframe(df_merge, use_container_width=True)
+    st.success("✅ Final Result (เหมือน manual แล้ว)")
+    st.dataframe(df_final, use_container_width=True)
 
     # =========================
     # Download
     # =========================
     output = BytesIO()
-    df_merge.to_excel(output, index=False)
+    df_final.to_excel(output, index=False)
     output.seek(0)
 
     st.download_button(
-        "📥 Download Excel",
+        "📥 Download Final Result",
         data=output,
-        file_name="DTEN_Linkage.xlsx",
+        file_name="final_result.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
 
