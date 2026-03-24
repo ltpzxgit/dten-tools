@@ -5,7 +5,7 @@ REQ_ID_REGEX = r'Request ID:\s*([0-9a-fA-F\-]{36})'
 DT_REGEX = r'^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}'
 
 # =========================
-# COMMON FUNCTIONS
+# COMMON
 # =========================
 def extract_datetime(text):
     match = re.search(DT_REGEX, text)
@@ -30,7 +30,7 @@ def extract_device_id(text):
 
 
 # =========================
-# SHEET 1: DTEN LINKAGE
+# SHEET 1
 # =========================
 def process_dten_linkage(df_req, df_res):
 
@@ -57,7 +57,7 @@ def process_dten_linkage(df_req, df_res):
 
     df_req_clean = pd.DataFrame(records_req)
 
-    # ===== RESPONSE =====
+    # ===== RESPONSE (smart pairing) =====
     df_res["raw"] = df_res.apply(lambda r: " ".join(map(str, r.values)), axis=1)
 
     records_res = []
@@ -100,7 +100,7 @@ def process_dten_linkage(df_req, df_res):
 
 
 # =========================
-# SHEET 2: DEVICE LIST
+# SHEET 2
 # =========================
 def process_device_list(df_req):
 
