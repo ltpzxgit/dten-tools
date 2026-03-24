@@ -106,27 +106,40 @@ def process_dten_linkage(df_req, df_res):
 # =========================
 def process_device_list(df_req, df_linkage):
 
-    df_req["raw"] = df_req.apply(lambda r: " ".join(map(str, r.values)), axis=1)
+    # 🔥 รวม req + response
+    df_all = pd.concat([
+        df_req.copy(),
+        df_linkage[["Request ID", "Response"]].rename(columns={"Response": "raw"})
+    ], ignore_index=True)
+
+    # 🔥 ทำ raw text
+    if "raw" not in df_all.columns:
+        df_all["raw"] = df_all.apply(lambda r: " ".join(map(str, r.values)), axis=1)
+    else:
+        df_all["raw"] = df_all["raw"].fillna("")
 
     records = []
     current_req_id = None
 
-    for row in df_req["raw"]:
+    for row in df_all["raw"]:
 
-        # 🔹 หา Request ID
-        if "INFO" in row and "Request ID" in row:
-            current_req_id = extract_request_id(row)
+        # 🔥 sticky request id (สำคัญมาก)
+        req_id = extract_request_id(row)
+        if req_id:
+            current_req_id = req_id
 
-        # 🔹 ดึง device ทุกบรรทัด (สำคัญ)
-        devices = extract_all_device_ids(row)
+        # 🔥 regex flexible ขึ้น
+        devices = re.findall(r'[A-Z]{3}\d{5,}', str(row))
 
         for d in devices:
-            records.append({
-                "Request ID": current_req_id,
-                "deviceId": d
-            })
+            if current_req_id:
+                records.append({
+                    "Request ID": current_req_id,
+                    "deviceId": d
+                })
 
-    df_device = pd.DataFrame(records).drop_duplicates()
+    # 🔥 ห้าม drop duplicates ตอนนี้ (ต้อง match Quantity)
+    df_device = pd.DataFrame(records)
 
     # =========================
     # Basic fields
@@ -158,7 +171,7 @@ def process_device_list(df_req, df_linkage):
     df_device["Success_Count"] = df_device["Response"].apply(count_success)
 
     # =========================
-    # 🔥 BYC count
+    # 🔥 BYC count (จำนวน device จริง)
     # =========================
     df_device["BYC_Count"] = df_device.groupby("Request ID")["deviceId"].transform("count")
 
