@@ -4,7 +4,7 @@ import re
 from io import BytesIO
 
 st.set_page_config(page_title="DTEN Linkage Tool", layout="wide")
-st.title("🔥 DTEN Linkage (Auto Combine → Final Result)")
+st.title("🔥 DTEN Linkage (Final Auto Tool)")
 
 # =========================
 # Upload
@@ -12,20 +12,24 @@ st.title("🔥 DTEN Linkage (Auto Combine → Final Result)")
 file_req = st.file_uploader("📥 Upload File 1 (Request)", type=["csv", "xlsx"])
 file_res = st.file_uploader("📥 Upload File 2 (Response)", type=["csv", "xlsx"])
 
-
 # =========================
 # Extract Functions
 # =========================
 def extract_request_id(text):
     if pd.isna(text):
         return None
-    match = re.search(r'[0-9a-fA-F\-]{30,}', str(text))
+    
+    match = re.search(
+        r'\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b',
+        str(text)
+    )
     return match.group(0) if match else None
 
 
 def extract_datetime(text):
     if pd.isna(text):
         return None
+    
     match = re.search(r'\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2}', str(text))
     return match.group(0) if match else None
 
@@ -33,6 +37,7 @@ def extract_datetime(text):
 def cut_ldcm(text):
     if pd.isna(text):
         return ""
+    
     text = str(text)
     idx = text.find("LDCMLists")
     return text[idx:] if idx != -1 else ""
@@ -57,7 +62,7 @@ if file_req and file_res:
 
     df_req = df_req.dropna(subset=["Request ID"])
 
-    # 🔥 รวม Request (สำคัญ)
+    # 🔥 รวม Request (group by Request ID)
     df_req_group = df_req.groupby("Request ID").agg({
         "date": "first",
         "Request": lambda x: " ".join([i for i in x if i])
@@ -108,18 +113,18 @@ if file_req and file_res:
     # =========================
     # Show
     # =========================
-    st.success("✅ Final Result (เหมือน manual แล้ว)")
+    st.success("✅ Final Result (ตรง manual แล้ว)")
     st.dataframe(df_final, use_container_width=True)
 
     # =========================
-    # Download
+    # Download (ไม่เป็น .bin)
     # =========================
     output = BytesIO()
     df_final.to_excel(output, index=False)
     output.seek(0)
 
     st.download_button(
-        "📥 Download Final Result",
+        label="📥 Download Final Result",
         data=output,
         file_name="final_result.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
