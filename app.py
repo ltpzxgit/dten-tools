@@ -1,6 +1,11 @@
 import streamlit as st
 import pandas as pd
 from io import BytesIO
+import sys
+import os
+
+# 🔥 FIX import path (สำคัญสำหรับ Streamlit Cloud)
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from processors.dten_linkage import process_dten_linkage, process_device_list
 
@@ -34,7 +39,7 @@ if file_req and file_res:
     st.dataframe(df_device, use_container_width=True)
 
     # =========================
-    # Download (Multi Sheet)
+    # Download Multi Sheet
     # =========================
     output = BytesIO()
 
