@@ -78,12 +78,12 @@ if file_req and file_res:
     output = BytesIO()
 
     try:
-        writer_engine = "xlsxwriter"
         import xlsxwriter
+        engine = "xlsxwriter"
     except:
-        writer_engine = "openpyxl"
+        engine = "openpyxl"
 
-    with pd.ExcelWriter(output, engine=writer_engine) as writer:
+    with pd.ExcelWriter(output, engine=engine) as writer:
         df_linkage.to_excel(writer, sheet_name="DTEN Linkage", index=False)
         df_device.to_excel(writer, sheet_name="Device List", index=False)
 
