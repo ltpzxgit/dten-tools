@@ -4,7 +4,7 @@ import re
 from io import BytesIO
 
 st.set_page_config(page_title="DTEN Linkage Tool", layout="wide")
-st.title("🔥 DTEN Linkage (Production Version)")
+st.title("🔥 DTEN Linkage (INFO + DEBUG Pairing)")
 
 # =========================
 # Upload
@@ -13,45 +13,21 @@ file_req = st.file_uploader("📥 Upload File 1 (Request)", type=["csv", "xlsx"]
 file_res = st.file_uploader("📥 Upload File 2 (Response)", type=["csv", "xlsx"])
 
 # =========================
-# Regex Pattern
+# Regex
 # =========================
-GUID_REGEX = r'[0-9a-fA-F\-]{36}'
-DT_REGEX = r'\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2}'
+REQ_ID_REGEX = r'Request ID:\s*([0-9a-fA-F\-]{36})'
+DT_REGEX = r'^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}'
 
 # =========================
-# Extract Functions
+# Functions
 # =========================
-def extract_request_id(text):
-    if pd.isna(text):
-        return None
-
-    text = str(text)
-
-    # 🔥 จับจาก I_LDCM_ACT_020 เท่านั้น
-    match = re.search(
-        r'I_LDCM_ACT_020.*?([0-9a-fA-F\-]{36})',
-        text
-    )
-
-    return match.group(1) if match else None
-
-
 def extract_datetime(text):
-    if pd.isna(text):
-        return pd.NaT
+    match = re.search(DT_REGEX, text)
+    return match.group(0) if match else None
 
-    match = re.search(DT_REGEX, str(text))
-    return pd.to_datetime(match.group(0)) if match else pd.NaT
-
-
-def cut_ldcm(text):
-    if pd.isna(text):
-        return ""
-
-    text = str(text)
-    idx = text.find("LDCMLists")
-    return text[idx:] if idx != -1 else ""
-
+def extract_request_id(text):
+    match = re.search(REQ_ID_REGEX, text)
+    return match.group(1) if match else None
 
 def read_file(f):
     return pd.read_csv(f) if f.name.endswith("csv") else pd.read_excel(f)
@@ -64,24 +40,36 @@ if file_req and file_res:
     df_req = read_file(file_req)
     df_res = read_file(file_res)
 
-    # =========================
-    # REQUEST
-    # =========================
+    # รวม row เป็น text
     df_req["raw"] = df_req.apply(lambda r: " ".join(map(str, r.values)), axis=1)
 
-    df_req["Request ID"] = df_req["raw"].apply(extract_request_id)
-    df_req["date"] = df_req["raw"].apply(extract_datetime)
-    df_req["Request"] = df_req["raw"].apply(cut_ldcm)
+    # =========================
+    # 🔥 Pair INFO + DEBUG
+    # =========================
+    records = []
+    current = {}
 
-    df_req = df_req.dropna(subset=["Request ID"])
+    for row in df_req["raw"]:
 
-    # 🔥 รวม Request
-    df_req_group = df_req.groupby("Request ID").agg({
-        "date": "min",
-        "Request": lambda x: " ".join([i for i in x if i])
-    }).reset_index()
+        # INFO → start record
+        if "INFO" in row and "Request ID" in row:
+            if current:
+                records.append(current)
+                current = {}
 
-    df_req_group["date"] = df_req_group["date"].dt.strftime("%Y/%m/%d %H:%M:%S")
+            current["Request ID"] = extract_request_id(row)
+            current["date"] = extract_datetime(row)
+
+        # DEBUG → attach request body
+        elif "DEBUG" in row and "Request:" in row:
+            if "Request:" in row:
+                current["Request"] = row.split("Request:", 1)[1]
+
+    # append last
+    if current:
+        records.append(current)
+
+    df_req_clean = pd.DataFrame(records)
 
     # =========================
     # RESPONSE
@@ -89,20 +77,19 @@ if file_req and file_res:
     df_res["raw"] = df_res.apply(lambda r: " ".join(map(str, r.values)), axis=1)
 
     df_res["Request ID"] = df_res["raw"].apply(extract_request_id)
-    df_res["Response"] = df_res["raw"].apply(cut_ldcm)
+    df_res["Response"] = df_res["raw"]
 
     df_res = df_res.dropna(subset=["Request ID"])
 
-    # 🔥 รวม Response
     df_res_group = df_res.groupby("Request ID").agg({
-        "Response": lambda x: " ".join([i for i in x if i])
+        "Response": lambda x: " ".join(x)
     }).reset_index()
 
     # =========================
     # MERGE
     # =========================
     df_final = pd.merge(
-        df_req_group,
+        df_req_clean,
         df_res_group,
         on="Request ID",
         how="left"
@@ -111,13 +98,11 @@ if file_req and file_res:
     # =========================
     # Sort + No.
     # =========================
-    df_final["_dt"] = pd.to_datetime(df_final["date"], errors="coerce")
-    df_final = df_final.sort_values("_dt").drop(columns=["_dt"]).reset_index(drop=True)
-
+    df_final = df_final.sort_values("date").reset_index(drop=True)
     df_final["No."] = df_final.index + 1
 
     # =========================
-    # Final Format
+    # Arrange
     # =========================
     df_final = df_final[[
         "No.",
@@ -128,15 +113,9 @@ if file_req and file_res:
     ]]
 
     # =========================
-    # Debug
-    # =========================
-    st.write("🔍 Sample Request IDs:")
-    st.write(df_final["Request ID"].head(10))
-
-    # =========================
     # Show
     # =========================
-    st.success("✅ DONE (ตรง final แล้ว)")
+    st.success("✅ DONE (INFO+DEBUG Pairing ถูกแล้ว)")
     st.dataframe(df_final, use_container_width=True)
 
     # =========================
@@ -147,7 +126,7 @@ if file_req and file_res:
     output.seek(0)
 
     st.download_button(
-        label="📥 Download Final Result",
+        "📥 Download Final Result",
         data=output,
         file_name="final_result.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
