@@ -4,7 +4,7 @@ import re
 from io import BytesIO
 
 st.set_page_config(page_title="DTEN Linkage Tool", layout="wide")
-st.title("🔥 DTEN Linkage (Final Auto Tool - FIXED)")
+st.title("🔥 DTEN Linkage (Production Version)")
 
 # =========================
 # Upload
@@ -13,32 +13,33 @@ file_req = st.file_uploader("📥 Upload File 1 (Request)", type=["csv", "xlsx"]
 file_res = st.file_uploader("📥 Upload File 2 (Response)", type=["csv", "xlsx"])
 
 # =========================
-# Regex
+# Regex Pattern
 # =========================
-GUID_REGEX = r'\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b'
+GUID_REGEX = r'[0-9a-fA-F\-]{36}'
 DT_REGEX = r'\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2}'
 
 # =========================
 # Extract Functions
 # =========================
-def extract_request_id(row):
-    # 🔥 1. หา column ที่มีคำว่า request ก่อน (แม่นสุด)
-    for col in row.index:
-        val = str(row[col])
-        if "request" in col.lower():
-            match = re.search(GUID_REGEX, val)
-            if match:
-                return match.group(0)
+def extract_request_id(text):
+    if pd.isna(text):
+        return None
 
-    # 🔥 2. fallback: หาในทั้ง row
-    full_text = " ".join(map(str, row.values))
-    match = re.search(GUID_REGEX, full_text)
-    return match.group(0) if match else None
+    text = str(text)
+
+    # 🔥 จับจาก I_LDCM_ACT_020 เท่านั้น
+    match = re.search(
+        r'I_LDCM_ACT_020.*?([0-9a-fA-F\-]{36})',
+        text
+    )
+
+    return match.group(1) if match else None
 
 
 def extract_datetime(text):
     if pd.isna(text):
         return pd.NaT
+
     match = re.search(DT_REGEX, str(text))
     return pd.to_datetime(match.group(0)) if match else pd.NaT
 
@@ -46,6 +47,7 @@ def extract_datetime(text):
 def cut_ldcm(text):
     if pd.isna(text):
         return ""
+
     text = str(text)
     idx = text.find("LDCMLists")
     return text[idx:] if idx != -1 else ""
@@ -67,7 +69,7 @@ if file_req and file_res:
     # =========================
     df_req["raw"] = df_req.apply(lambda r: " ".join(map(str, r.values)), axis=1)
 
-    df_req["Request ID"] = df_req.apply(extract_request_id, axis=1)
+    df_req["Request ID"] = df_req["raw"].apply(extract_request_id)
     df_req["date"] = df_req["raw"].apply(extract_datetime)
     df_req["Request"] = df_req["raw"].apply(cut_ldcm)
 
@@ -86,7 +88,7 @@ if file_req and file_res:
     # =========================
     df_res["raw"] = df_res.apply(lambda r: " ".join(map(str, r.values)), axis=1)
 
-    df_res["Request ID"] = df_res.apply(extract_request_id, axis=1)
+    df_res["Request ID"] = df_res["raw"].apply(extract_request_id)
     df_res["Response"] = df_res["raw"].apply(cut_ldcm)
 
     df_res = df_res.dropna(subset=["Request ID"])
@@ -126,7 +128,7 @@ if file_req and file_res:
     ]]
 
     # =========================
-    # Debug (เช็คว่าดึง ID ได้จริง)
+    # Debug
     # =========================
     st.write("🔍 Sample Request IDs:")
     st.write(df_final["Request ID"].head(10))
@@ -134,7 +136,7 @@ if file_req and file_res:
     # =========================
     # Show
     # =========================
-    st.success("✅ DONE (Request ID FIXED)")
+    st.success("✅ DONE (ตรง final แล้ว)")
     st.dataframe(df_final, use_container_width=True)
 
     # =========================
