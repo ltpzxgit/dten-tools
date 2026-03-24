@@ -24,12 +24,25 @@ def extract_device_id(text):
     return match.group(0) if match else None
 
 
-def extract_device_from_row(row):
+def extract_request_id(text):
+    if pd.isna(text):
+        return None
+    text = str(text)
+    match = re.search(r'\b[0-9a-fA-F\-]{30,}\b', text)
+    return match.group(0) if match else None
+
+
+def extract_all_from_row(row):
+    device = None
+    request_id = None
+
     for val in row:
-        device = extract_device_id(val)
-        if device:
-            return device
-    return None
+        if not device:
+            device = extract_device_id(val)
+        if not request_id:
+            request_id = extract_request_id(val)
+
+    return pd.Series([device, request_id])
 
 
 # =========================
@@ -42,13 +55,13 @@ if dten_file and tcap_file and template_file:
     df_tcap = pd.read_csv(tcap_file) if tcap_file.name.endswith("csv") else pd.read_excel(tcap_file)
     df_template = pd.read_excel(template_file)
 
-    # --- Clean header ---
+    # --- Clean column name ---
     df_template.columns = df_template.columns.str.strip()
 
     # =========================
-    # Extract Device ID (DTEN)
+    # Extract (DTEN)
     # =========================
-    df_dten["deviceId"] = df_dten.apply(extract_device_from_row, axis=1)
+    df_dten[["deviceId", "RequestId"]] = df_dten.apply(extract_all_from_row, axis=1)
     df_dten = df_dten.dropna(subset=["deviceId"])
 
     st.write(f"🔍 Found Devices (DTEN): {df_dten['deviceId'].nunique()}")
@@ -57,7 +70,15 @@ if dten_file and tcap_file and template_file:
     # Build Result Table
     # =========================
     df_result = pd.DataFrame()
-    df_result["deviceId"] = df_dten["deviceId"].unique()
+    df_result["deviceId"] = sorted(df_dten["deviceId"].unique())
+
+    # No.
+    df_result = df_result.reset_index(drop=True)
+    df_result["No."] = df_result.index + 1
+
+    # RequestId (ล่าสุด)
+    req_map = df_dten.groupby("deviceId")["RequestId"].last().to_dict()
+    df_result["RequestId"] = df_result["deviceId"].map(req_map)
 
     # ProStatus
     df_result["ProStatus"] = "PROD"
@@ -67,18 +88,16 @@ if dten_file and tcap_file and template_file:
         lambda x: "AIS" if str(x).startswith("A") else "TRUE"
     )
 
-    # DTENLinkage Result
+    # DTEN Result (เอา log ล่าสุด)
     df_dten["full_text"] = df_dten.astype(str).apply(lambda row: " ".join(row), axis=1)
-    result_map = df_dten.groupby("deviceId")["full_text"].first().to_dict()
+    result_map = df_dten.groupby("deviceId")["full_text"].last().to_dict()
     df_result["DTENLinkage Result"] = df_result["deviceId"].map(result_map)
 
     # =========================
-    # Extract Device ID (TCAP)
+    # TCAP
     # =========================
-    df_tcap["deviceId"] = df_tcap.apply(extract_device_from_row, axis=1)
+    df_tcap["deviceId"] = df_tcap.apply(lambda row: extract_device_id(" ".join(map(str, row))), axis=1)
     df_tcap = df_tcap.dropna(subset=["deviceId"])
-
-    st.write(f"🔍 Found Devices (TCAP): {df_tcap['deviceId'].nunique()}")
 
     tcap_set = set(df_tcap["deviceId"])
 
@@ -96,25 +115,21 @@ if dten_file and tcap_file and template_file:
     df_result["received from AIS"] = df_result["sent to AIS"]
 
     # =========================
-    # 🔒 FIX TEMPLATE STRUCTURE
+    # 🔒 TEMPLATE LOCK (ห้ามเพี้ยน)
     # =========================
     final_df = df_template.copy()
 
     result_map_full = df_result.set_index("deviceId").to_dict(orient="index")
 
-    if "deviceId" in final_df.columns:
+    for idx, row in final_df.iterrows():
+        device = str(row.get("deviceId", "")).strip()
 
-        for idx, row in final_df.iterrows():
-            device = row["deviceId"]
+        if device in result_map_full:
+            data = result_map_full[device]
 
-            if device in result_map_full:
-                for col in result_map_full[device]:
-                    if col in final_df.columns:
-                        final_df.at[idx, col] = result_map_full[device][col]
-
-    else:
-        st.warning("⚠️ Template ไม่มี deviceId → ใช้ append")
-        final_df = pd.concat([final_df, df_result], ignore_index=True)
+            for col in final_df.columns:
+                if col in data:
+                    final_df.at[idx, col] = data[col]
 
     # =========================
     # Validation
@@ -122,9 +137,6 @@ if dten_file and tcap_file and template_file:
     missing = set(df_result["deviceId"]) - set(final_df["deviceId"])
     if missing:
         st.warning(f"⚠️ Missing devices in template: {len(missing)}")
-
-    # Lock column order
-    final_df = final_df[df_template.columns]
 
     # =========================
     # Output
@@ -136,11 +148,7 @@ if dten_file and tcap_file and template_file:
     final_df.to_excel(output_file, index=False)
 
     with open(output_file, "rb") as f:
-        st.download_button(
-            "📥 Download Result",
-            f,
-            file_name=output_file
-        )
+        st.download_button("📥 Download Result", f, file_name=output_file)
 
 else:
     st.info("👆 Upload all files to start")
