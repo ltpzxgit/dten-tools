@@ -131,8 +131,8 @@ def process_device_list(df_req, df_linkage):
             current_req_id = req_id
 
         # 🔥 FIX regex ตาม spec จริง
-        devices = re.findall(r'\b[A-Z]{3}\d{5}\b', str(row))
-
+        ddevices = re.findall(r'(?i)\b[a-z]{3}\d{5}\b', str(row))
+devices = [d.upper() for d in devices]
         for d in devices:
             if current_req_id:
                 records.append({
