@@ -4,7 +4,7 @@ from io import BytesIO
 import sys
 import os
 
-# 🔥 FIX import path (สำคัญสำหรับ Streamlit Cloud)
+# 🔥 FIX import path
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from processors.dten_linkage import process_dten_linkage, process_device_list
@@ -55,7 +55,6 @@ if file_req and file_res:
         st.stop()
 
     try:
-        # 🔥 FIX ตรงนี้
         df_device = process_device_list(
             df_req.copy(),
             df_linkage.copy()
@@ -74,11 +73,17 @@ if file_req and file_res:
     st.dataframe(df_device, use_container_width=True)
 
     # =========================
-    # Download Multi Sheet
+    # Download
     # =========================
     output = BytesIO()
 
-    with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
+    try:
+        writer_engine = "xlsxwriter"
+        import xlsxwriter
+    except:
+        writer_engine = "openpyxl"
+
+    with pd.ExcelWriter(output, engine=writer_engine) as writer:
         df_linkage.to_excel(writer, sheet_name="DTEN Linkage", index=False)
         df_device.to_excel(writer, sheet_name="Device List", index=False)
 
