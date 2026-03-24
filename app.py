@@ -1,9 +1,10 @@
 import streamlit as st
 import pandas as pd
 import re
+from io import BytesIO
 
 st.set_page_config(page_title="DTEN Full Processor", layout="wide")
-st.title("🔥 DTEN Full Processor (Stable Version)")
+st.title("🔥 DTEN Full Processor (Stable + Clean Download)")
 
 # =========================
 # Upload Files
@@ -54,13 +55,11 @@ if uploaded_files:
     for file in uploaded_files:
         try:
             df = pd.read_csv(file) if file.name.endswith("csv") else pd.read_excel(file)
-        except:
-            st.error(f"❌ อ่านไฟล์ {file.name} ไม่ได้")
+        except Exception as e:
+            st.error(f"❌ อ่านไฟล์ {file.name} ไม่ได้: {e}")
             continue
 
-        # =========================
-        # Extract (FIX SHAPE BUG)
-        # =========================
+        # ===== Extract =====
         extracted = df.apply(extract_row, axis=1)
         extracted.columns = ["deviceId", "RequestId"]
 
@@ -69,9 +68,7 @@ if uploaded_files:
 
         df = df.dropna(subset=["deviceId"])
 
-        # =========================
-        # Create raw_text (FIX ERROR)
-        # =========================
+        # ===== FIX raw_text (ไม่ใช้ agg แล้ว) =====
         df["raw_text"] = df.apply(
             lambda row: " ".join([str(x) for x in row.values]),
             axis=1
@@ -113,7 +110,7 @@ if uploaded_files:
     result_map = df_all.groupby("deviceId")["raw_text"].last().to_dict()
     df_result["DTENLinkage Result"] = df_result["deviceId"].map(result_map)
 
-    # TCAP
+    # TCAP detection
     tcap_devices = set(
         df_all[df_all["raw_text"].str.contains("TCAP", na=False)]["deviceId"]
     )
@@ -130,17 +127,21 @@ if uploaded_files:
     df_result["received from AIS"] = df_result["sent to AIS"]
 
     # =========================
-    # Output
+    # Show Result
     # =========================
-    st.success("✅ DONE (No Error)")
+    st.success("✅ DONE (Download will be .xlsx)")
     st.dataframe(df_result, use_container_width=True)
 
-    df_result.to_excel("final_result.xlsx", index=False)
+    # =========================
+    # 🔥 FIX DOWNLOAD (สำคัญสุด)
+    # =========================
+    output = BytesIO()
+    df_result.to_excel(output, index=False)
+    output.seek(0)
 
-    with open("final_result.xlsx", "rb") as f:
     st.download_button(
         label="📥 Download Final Result",
-        data=f,
+        data=output,
         file_name="final_result.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
