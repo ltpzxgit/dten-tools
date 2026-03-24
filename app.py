@@ -15,19 +15,50 @@ st.title("🔥 DTEN Tool (Multi-Sheet)")
 file_req = st.file_uploader("📥 Upload Request File")
 file_res = st.file_uploader("📥 Upload Response File")
 
-def read_file(f):
-    return pd.read_csv(f) if f.name.endswith("csv") else pd.read_excel(f)
 
+# =========================
+# Utils
+# =========================
+def read_file(f):
+    try:
+        if f.name.endswith("csv"):
+            return pd.read_csv(f, encoding="utf-8-sig")
+        return pd.read_excel(f)
+    except Exception as e:
+        st.error(f"❌ Read file error: {e}")
+        st.stop()
+
+
+def normalize_columns(df):
+    df.columns = df.columns.str.strip().str.lower()
+    return df
+
+
+# =========================
+# Main
+# =========================
 if file_req and file_res:
 
-    df_req = read_file(file_req)
-    df_res = read_file(file_res)
+    df_req = normalize_columns(read_file(file_req))
+    df_res = normalize_columns(read_file(file_res))
+
+    st.write("📊 Request Columns:", df_req.columns.tolist())
+    st.write("📊 Response Columns:", df_res.columns.tolist())
 
     # =========================
     # Process
     # =========================
-    df_linkage = process_dten_linkage(df_req.copy(), df_res.copy())
-    df_device = process_device_list(df_req.copy())
+    try:
+        df_linkage = process_dten_linkage(df_req.copy(), df_res.copy())
+    except Exception as e:
+        st.error(f"❌ Linkage Error: {e}")
+        st.stop()
+
+    try:
+        df_device = process_device_list(df_req.copy())
+    except Exception as e:
+        st.error(f"❌ Device List Error: {e}")
+        st.stop()
 
     # =========================
     # Show
