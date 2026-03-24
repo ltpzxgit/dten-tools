@@ -4,7 +4,7 @@ import re
 from io import BytesIO
 
 st.set_page_config(page_title="DTEN Linkage Tool", layout="wide")
-st.title("🔥 DTEN Linkage (FINAL REAL)")
+st.title("🔥 DTEN Linkage (Ultimate Version)")
 
 # =========================
 # Upload
@@ -48,45 +48,58 @@ if file_req and file_res:
     df_res = read_file(file_res)
 
     # =========================
-    # REQUEST
+    # REQUEST (INFO + DEBUG pairing)
     # =========================
     df_req["raw"] = df_req.apply(lambda r: " ".join(map(str, r.values)), axis=1)
 
-    records = []
+    records_req = []
     current = {}
 
     for row in df_req["raw"]:
 
+        # INFO → start new request
         if "INFO" in row and "Request ID" in row:
             if current:
-                records.append(current)
+                records_req.append(current)
                 current = {}
 
             current["Request ID"] = extract_request_id(row)
             current["date"] = extract_datetime(row)
 
+        # DEBUG → request body
         elif "DEBUG" in row and "Request:" in row:
             current["Request"] = extract_ldcm(row)
 
     if current:
-        records.append(current)
+        records_req.append(current)
 
-    df_req_clean = pd.DataFrame(records)
+    df_req_clean = pd.DataFrame(records_req)
 
     # =========================
-    # RESPONSE (🔥 FIXED ใช้ logic เดียวกัน)
+    # RESPONSE (SMART PAIRING)
     # =========================
     df_res["raw"] = df_res.apply(lambda r: " ".join(map(str, r.values)), axis=1)
 
-    df_res["Request ID"] = df_res["raw"].apply(extract_request_id)
+    records_res = []
+    last_response = None
 
-    df_res["Response"] = df_res["raw"].apply(extract_ldcm)
+    for row in df_res["raw"]:
 
-    df_res = df_res.dropna(subset=["Request ID"])
+        # เก็บ response ล่าสุด
+        if "Response:" in row:
+            last_response = extract_ldcm(row)
 
-    df_res_group = df_res.groupby("Request ID").agg({
-        "Response": lambda x: " ".join([i for i in x if i])
-    }).reset_index()
+        # เจอ request id → จับคู่
+        if "Request ID" in row:
+            req_id = extract_request_id(row)
+
+            if req_id:
+                records_res.append({
+                    "Request ID": req_id,
+                    "Response": last_response if last_response else ""
+                })
+
+    df_res_group = pd.DataFrame(records_res)
 
     # =========================
     # MERGE
@@ -103,6 +116,9 @@ if file_req and file_res:
     # =========================
     df_final = df_final.sort_values("date", ascending=False).reset_index(drop=True)
 
+    # =========================
+    # Add No.
+    # =========================
     df_final["No."] = df_final.index + 1
 
     # =========================
@@ -119,7 +135,7 @@ if file_req and file_res:
     # =========================
     # Show
     # =========================
-    st.success("✅ DONE (ตรงของจริง 100%)")
+    st.success("✅ DONE (Ultimate Version)")
     st.dataframe(df_final, use_container_width=True)
 
     # =========================
