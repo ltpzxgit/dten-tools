@@ -8,25 +8,42 @@ st.set_page_config(page_title="ITOSE - DTEN", layout="wide")
 st.title("ITOSE Tools - DTEN Summary")
 
 # =========================
-# CSS
+# CSS (🔥 NEW STYLE)
 # =========================
 st.markdown("""
 <style>
 .card {
-    padding: 20px;
-    border-radius: 14px;
-    background: linear-gradient(145deg, #0f172a, #111827);
-    border: 1px solid #374151;
+    padding: 28px;
+    border-radius: 18px;
+    background: linear-gradient(145deg, #0b1a33, #0f172a);
+    border: 1px solid rgba(148,163,184,0.2);
     text-align: center;
+    transition: 0.2s ease;
 }
+
+.card:hover {
+    transform: translateY(-2px);
+    border: 1px solid rgba(148,163,184,0.4);
+}
+
 .card-title {
-    font-size: 14px;
-    color: #9ca3af;
+    font-size: 16px;
+    color: #94a3b8;
+    margin-bottom: 12px;
 }
+
 .card-value {
-    font-size: 42px;
-    font-weight: bold;
+    font-size: 56px;
+    font-weight: 700;
     color: white;
+}
+
+.card-red {
+    padding: 28px;
+    border-radius: 18px;
+    background: linear-gradient(145deg, #3b0a0a, #450a0a);
+    border: 1px solid #dc2626;
+    text-align: center;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -67,6 +84,17 @@ def get_carrier(deviceid):
         return "AIS"
     return "TRUE"
 
+# =========================
+# CARD
+# =========================
+def card(title, total, is_error=False):
+    card_class = "card-red" if is_error else "card"
+    return f"""
+    <div class="{card_class}">
+        <div class="card-title">{title}</div>
+        <div class="card-value">{total}</div>
+    </div>
+    """
 
 # =========================
 # HIGHLIGHT
@@ -85,32 +113,6 @@ def highlight_error_res(row):
 
 
 # =========================
-# CARD (🔥 ใหม่)
-# =========================
-def card(title, total, error, force_red=False):
-    if force_red:
-        bg = "linear-gradient(135deg, #7f1d1d, #991b1b)"
-        border = "#ef4444"
-    else:
-        if error > 0:
-            bg = "linear-gradient(135deg, rgba(239,68,68,0.15), rgba(239,68,68,0.05))"
-            border = "rgba(239,68,68,0.4)"
-        else:
-            bg = "linear-gradient(135deg, rgba(34,197,94,0.15), rgba(34,197,94,0.05))"
-            border = "rgba(34,197,94,0.4)"
-
-    return f"""
-    <div class="card" style="
-        background:{bg};
-        border:1px solid {border};
-    ">
-        <div class="card-title">{title}</div>
-        <div class="card-value">{total}</div>
-    </div>
-    """
-
-
-# =========================
 # UPLOAD
 # =========================
 col1, col2, col3, col4 = st.columns(4)
@@ -123,7 +125,6 @@ with col3:
     req_file = st.file_uploader("ProvisioningRequester", type=["xlsx", "csv"])
 with col4:
     res_file = st.file_uploader("ProvisioningResponder", type=["xlsx", "csv"])
-
 
 # =========================
 # INIT
@@ -140,7 +141,6 @@ df1 = df2 = df3 = df4 = pd.DataFrame()
 df7 = pd.DataFrame()
 df8 = pd.DataFrame()
 
-
 # =========================
 # SUMMARY
 # =========================
@@ -148,36 +148,33 @@ summary_placeholder = st.empty()
 
 def render_summary():
     with summary_placeholder.container():
-        st.markdown("### DTEN - Summary")
+        st.markdown("## Summary")
 
         c1, c2, c3, c4 = st.columns(4)
 
         with c1:
-            st.markdown(card("DTEN", dten_total, dten_error), unsafe_allow_html=True)
+            st.markdown(card("DTEN", dten_total, dten_error > 0), unsafe_allow_html=True)
         with c2:
-            st.markdown(card("DTENTCAP", tcap_total, tcap_error), unsafe_allow_html=True)
+            st.markdown(card("DTENTCAP", tcap_total, tcap_error > 0), unsafe_allow_html=True)
         with c3:
-            st.markdown(card("ProvisioningRequester", req_total, req_error), unsafe_allow_html=True)
+            st.markdown(card("ProvisioningRequester", req_total, req_error > 0), unsafe_allow_html=True)
         with c4:
-            st.markdown(card("ProvisioningResponder", res_total, res_error), unsafe_allow_html=True)
+            st.markdown(card("ProvisioningResponder", res_total, res_error > 0), unsafe_allow_html=True)
 
-        st.markdown("<div style='margin-top:15px'></div>", unsafe_allow_html=True)
+        st.markdown("<br>", unsafe_allow_html=True)
 
         c5, c6, c7, c8 = st.columns(4)
 
         with c5:
-            st.markdown(card("TRUE", true_total, 0), unsafe_allow_html=True)
+            st.markdown(card("TRUE", true_total, False), unsafe_allow_html=True)
         with c6:
-            st.markdown(card("AIS", ais_total, 0), unsafe_allow_html=True)
-
+            st.markdown(card("AIS", ais_total, False), unsafe_allow_html=True)
         with c7:
-            st.markdown(card("ProvisioningRequester Error", len(df7), len(df7), True), unsafe_allow_html=True)
-
+            st.markdown(card("Requester Error", len(df7), len(df7) > 0), unsafe_allow_html=True)
         with c8:
-            st.markdown(card("ProvisioningResponder Error", len(df8), len(df8), True), unsafe_allow_html=True)
+            st.markdown(card("Responder Error", len(df8), len(df8) > 0), unsafe_allow_html=True)
 
 render_summary()
-
 
 # =========================
 # DTEN
@@ -231,7 +228,6 @@ if dten_file:
     st.subheader("DTENLinkage")
     st.dataframe(df1.style.apply(highlight_error_dten, axis=1))
 
-
 # =========================
 # TCAP
 # =========================
@@ -265,7 +261,6 @@ if tcap_file:
     render_summary()
     st.subheader("DTENTCAPLinkage")
     st.dataframe(df2.style.apply(highlight_error_tcap, axis=1))
-
 
 # =========================
 # REQUESTER
@@ -303,7 +298,6 @@ if req_file:
     render_summary()
     st.subheader("ProvisioningRequester")
     st.dataframe(df3.style.apply(highlight_error_req, axis=1))
-
 
 # =========================
 # RESPONDER
@@ -348,18 +342,16 @@ if res_file:
     st.subheader("ProvisioningResponder")
     st.dataframe(df4.style.apply(highlight_error_res, axis=1))
 
-
 # =========================
-# ERROR TABLE ต่อท้าย
+# ERROR TABLE
 # =========================
 if not df7.empty:
-    st.subheader("ProvisioningRequester Error (Sheet7)")
+    st.subheader("ProvisioningRequester Error")
     st.dataframe(df7)
 
 if not df8.empty:
-    st.subheader("ProvisioningResponder Error (Sheet8)")
+    st.subheader("ProvisioningResponder Error")
     st.dataframe(df8)
-
 
 # =========================
 # EXPORT
