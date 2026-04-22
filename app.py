@@ -88,6 +88,33 @@ def highlight_error_res(row):
     return ['background-color: #ffcccc' if row["ResultCode"] != "20000" else '' for _ in row]
 
 # =========================
+# CARD
+# =========================
+def card(title, total, error):
+    if error > 0:
+        bg = "linear-gradient(135deg, rgba(239,68,68,0.15), rgba(239,68,68,0.05))"
+        border = "rgba(239,68,68,0.4)"
+        color = "#f87171"
+    else:
+        bg = "linear-gradient(135deg, rgba(34,197,94,0.15), rgba(34,197,94,0.05))"
+        border = "rgba(34,197,94,0.4)"
+        color = "#4ade80"
+
+    return f"""
+    <div class="card">
+        <div class="card-title">{title}</div>
+        <div class="card-value">{total}</div>
+        <div class="card-error" style="
+            background:{bg};
+            border:1px solid {border};
+            color:{color};
+        ">
+            Error: {error}
+        </div>
+    </div>
+    """
+
+# =========================
 # UPLOAD
 # =========================
 col1, col2, col3, col4 = st.columns(4)
@@ -102,7 +129,7 @@ with col4:
     res_file = st.file_uploader("ProvisioningResponder", type=["xlsx", "csv"])
 
 # =========================
-# INIT COUNT
+# INIT
 # =========================
 dten_total = dten_error = 0
 tcap_total = tcap_error = 0
@@ -110,6 +137,27 @@ req_total = req_error = 0
 res_total = res_error = 0
 
 df1 = df2 = df3 = df4 = pd.DataFrame()
+
+# =========================
+# SUMMARY (อยู่บน)
+# =========================
+summary_placeholder = st.empty()
+
+def render_summary():
+    with summary_placeholder.container():
+        st.markdown("### DTEN - Summary")
+        c1, c2, c3, c4 = st.columns(4)
+
+        with c1:
+            st.markdown(card("DTEN", dten_total, dten_error), unsafe_allow_html=True)
+        with c2:
+            st.markdown(card("DTENTCAP", tcap_total, tcap_error), unsafe_allow_html=True)
+        with c3:
+            st.markdown(card("ProvisioningRequester", req_total, req_error), unsafe_allow_html=True)
+        with c4:
+            st.markdown(card("ProvisioningResponder", res_total, res_error), unsafe_allow_html=True)
+
+render_summary()
 
 # =========================
 # DTEN
@@ -155,6 +203,8 @@ if dten_file:
     dten_total = len(df1)
     dten_error = len(df1[df1["Result"] != "Process completed successfully"])
 
+    render_summary()
+
     st.subheader("DTENLinkage")
     st.dataframe(df1.style.apply(highlight_error_dten, axis=1))
 
@@ -187,6 +237,8 @@ if tcap_file:
 
     tcap_total = len(df2)
     tcap_error = len(df2[df2["TypeStatus"] != "OK"])
+
+    render_summary()
 
     st.subheader("DTENTCAPLinkage")
     st.dataframe(df2.style.apply(highlight_error_tcap, axis=1))
@@ -221,6 +273,8 @@ if req_file:
 
     req_total = len(df3)
     req_error = len(df3[df3["ResultCode"] != "20000"])
+
+    render_summary()
 
     st.subheader("ProvisioningRequester")
     st.dataframe(df3.style.apply(highlight_error_req, axis=1))
@@ -262,24 +316,10 @@ if res_file:
     res_total = len(df4)
     res_error = len(df4[df4["ResultCode"] != "20000"])
 
+    render_summary()
+
     st.subheader("ProvisioningResponder")
     st.dataframe(df4.style.apply(highlight_error_res, axis=1))
-
-# =========================
-# SUMMARY (แสดงตลอด)
-# =========================
-st.markdown("### DTEN - Summary")
-
-col1, col2, col3, col4 = st.columns(4)
-
-with col1:
-    st.markdown(card("DTEN", dten_total, dten_error), unsafe_allow_html=True)
-with col2:
-    st.markdown(card("DTENTCAP", tcap_total, tcap_error), unsafe_allow_html=True)
-with col3:
-    st.markdown(card("ProvisioningRequester", req_total, req_error), unsafe_allow_html=True)
-with col4:
-    st.markdown(card("ProvisioningResponder", res_total, res_error), unsafe_allow_html=True)
 
 # =========================
 # EXPORT
