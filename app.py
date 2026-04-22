@@ -47,6 +47,7 @@ PAIR_REGEX = r'"LDCMID":"([A-Za-z0-9\-]+)".*?"StatusReg":"([^"]+)".*?"ResDate":"
 TCAP_REGEX = r'"deviceId":"([^"]+)".*?"IMEI":"([^"]+)".*?"ICCID":"([^"]+)".*?"IMSI":"([^"]+)".*?"prodStatus":"([^"]+)".*?"prodDate":"([^"]+)".*?"sendDate":"([^"]+)".*?"typeStatus":"([^"]+)"'
 AIS_REGEX = r'resourceOrderId":\s*"([^"]+)".*?resourceGroupId":\s*"([^"]+)".*?resourceOrderTimeOut":\s*"([^"]+)".*?resultCode":\s*"([^"]+)".*?resultDesc":\s*"([^"]+)".*?developerMessage":\s*"([^"]*)"'
 
+
 # =========================
 # FUNCTIONS
 # =========================
@@ -72,6 +73,7 @@ def get_carrier(deviceid):
         return "AIS"
     return "TRUE"
 
+
 # =========================
 # HIGHLIGHT
 # =========================
@@ -86,6 +88,7 @@ def highlight_error_req(row):
 
 def highlight_error_res(row):
     return ['background-color: #ffcccc' if row["ResultCode"] != "20000" else '' for _ in row]
+
 
 # =========================
 # CARD
@@ -114,6 +117,7 @@ def card(title, total, error):
     </div>
     """
 
+
 # =========================
 # UPLOAD
 # =========================
@@ -128,6 +132,7 @@ with col3:
 with col4:
     res_file = st.file_uploader("ProvisioningResponder", type=["xlsx", "csv"])
 
+
 # =========================
 # INIT
 # =========================
@@ -141,6 +146,11 @@ ais_total = 0
 
 df1 = df2 = df3 = df4 = pd.DataFrame()
 
+# ✅ NEW SHEETS
+df7 = pd.DataFrame()
+df8 = pd.DataFrame()
+
+
 # =========================
 # SUMMARY
 # =========================
@@ -150,7 +160,6 @@ def render_summary():
     with summary_placeholder.container():
         st.markdown("### DTEN - Summary")
 
-        # Row 1
         c1, c2, c3, c4 = st.columns(4)
 
         with c1:
@@ -162,7 +171,6 @@ def render_summary():
         with c4:
             st.markdown(card("ProvisioningResponder", res_total, res_error), unsafe_allow_html=True)
 
-        # Row 2
         st.markdown("<div style='margin-top:15px'></div>", unsafe_allow_html=True)
 
         c5, c6 = st.columns(2)
@@ -173,6 +181,7 @@ def render_summary():
             st.markdown(card("AIS", ais_total, 0), unsafe_allow_html=True)
 
 render_summary()
+
 
 # =========================
 # DTEN
@@ -214,7 +223,6 @@ if dten_file:
 
     df1 = pd.DataFrame(rows).drop_duplicates(subset=["DeviceID","Request ID","Date Time"])
     df1["Result"] = df1["Result"].astype(str).str.strip()
-
     df1["Carrier"] = df1["DeviceID"].apply(get_carrier)
 
     dten_total = len(df1)
@@ -227,6 +235,7 @@ if dten_file:
 
     st.subheader("DTENLinkage")
     st.dataframe(df1.style.apply(highlight_error_dten, axis=1))
+
 
 # =========================
 # TCAP
@@ -263,6 +272,7 @@ if tcap_file:
     st.subheader("DTENTCAPLinkage")
     st.dataframe(df2.style.apply(highlight_error_tcap, axis=1))
 
+
 # =========================
 # REQUESTER
 # =========================
@@ -291,13 +301,17 @@ if req_file:
     df3 = pd.DataFrame(rrows).drop_duplicates(subset=["DeviceID","UUID"])
     df3["ResultCode"] = df3["ResultCode"].astype(str).str.strip()
 
+    # ✅ Sheet 7
+    df7 = df3[df3["ResultCode"] != "20000"]
+
     req_total = len(df3)
-    req_error = len(df3[df3["ResultCode"] != "20000"])
+    req_error = len(df7)
 
     render_summary()
 
     st.subheader("ProvisioningRequester")
     st.dataframe(df3.style.apply(highlight_error_req, axis=1))
+
 
 # =========================
 # RESPONDER
@@ -333,13 +347,17 @@ if res_file:
     df4 = pd.DataFrame(srows).drop_duplicates(subset=["DeviceID","UUID"])
     df4["ResultCode"] = df4["ResultCode"].astype(str).str.strip()
 
+    # ✅ Sheet 8
+    df8 = df4[df4["ResultCode"] != "20000"]
+
     res_total = len(df4)
-    res_error = len(df4[df4["ResultCode"] != "20000"])
+    res_error = len(df8)
 
     render_summary()
 
     st.subheader("ProvisioningResponder")
     st.dataframe(df4.style.apply(highlight_error_res, axis=1))
+
 
 # =========================
 # EXPORT
@@ -355,6 +373,12 @@ if not df1.empty or not df2.empty or not df3.empty or not df4.empty:
             df3.to_excel(writer, index=False, sheet_name='ProvisioningRequester')
         if not df4.empty:
             df4.to_excel(writer, index=False, sheet_name='ProvisioningResponder')
+
+        # ✅ NEW SHEETS
+        if not df7.empty:
+            df7.to_excel(writer, index=False, sheet_name='Requester_Error')
+        if not df8.empty:
+            df8.to_excel(writer, index=False, sheet_name='Responder_Error')
 
     output.seek(0)
 
