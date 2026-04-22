@@ -28,12 +28,6 @@ st.markdown("""
     font-weight: bold;
     color: white;
 }
-.card-error {
-    margin-top: 12px;
-    padding: 12px;
-    border-radius: 10px;
-    font-weight: 500;
-}
 </style>
 """, unsafe_allow_html=True)
 
@@ -91,29 +85,27 @@ def highlight_error_res(row):
 
 
 # =========================
-# CARD
+# CARD (🔥 ใหม่)
 # =========================
-def card(title, total, error):
-    if error > 0:
-        bg = "linear-gradient(135deg, rgba(239,68,68,0.15), rgba(239,68,68,0.05))"
-        border = "rgba(239,68,68,0.4)"
-        color = "#f87171"
+def card(title, total, error, force_red=False):
+    if force_red:
+        bg = "linear-gradient(135deg, #7f1d1d, #991b1b)"
+        border = "#ef4444"
     else:
-        bg = "linear-gradient(135deg, rgba(34,197,94,0.15), rgba(34,197,94,0.05))"
-        border = "rgba(34,197,94,0.4)"
-        color = "#4ade80"
+        if error > 0:
+            bg = "linear-gradient(135deg, rgba(239,68,68,0.15), rgba(239,68,68,0.05))"
+            border = "rgba(239,68,68,0.4)"
+        else:
+            bg = "linear-gradient(135deg, rgba(34,197,94,0.15), rgba(34,197,94,0.05))"
+            border = "rgba(34,197,94,0.4)"
 
     return f"""
-    <div class="card">
+    <div class="card" style="
+        background:{bg};
+        border:1px solid {border};
+    ">
         <div class="card-title">{title}</div>
         <div class="card-value">{total}</div>
-        <div class="card-error" style="
-            background:{bg};
-            border:1px solid {border};
-            color:{color};
-        ">
-            Error: {error}
-        </div>
     </div>
     """
 
@@ -177,10 +169,12 @@ def render_summary():
             st.markdown(card("TRUE", true_total, 0), unsafe_allow_html=True)
         with c6:
             st.markdown(card("AIS", ais_total, 0), unsafe_allow_html=True)
+
         with c7:
-            st.markdown(card("ProvisioningRequester Error", len(df7), len(df7)), unsafe_allow_html=True)
+            st.markdown(card("ProvisioningRequester Error", len(df7), len(df7), True), unsafe_allow_html=True)
+
         with c8:
-            st.markdown(card("ProvisioningResponder Error", len(df8), len(df8)), unsafe_allow_html=True)
+            st.markdown(card("ProvisioningResponder Error", len(df8), len(df8), True), unsafe_allow_html=True)
 
 render_summary()
 
@@ -356,7 +350,7 @@ if res_file:
 
 
 # =========================
-# 🔥 ERROR TABLES (ต่อท้าย)
+# ERROR TABLE ต่อท้าย
 # =========================
 if not df7.empty:
     st.subheader("ProvisioningRequester Error (Sheet7)")
