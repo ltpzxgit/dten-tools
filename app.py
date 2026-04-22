@@ -145,8 +145,6 @@ true_total = 0
 ais_total = 0
 
 df1 = df2 = df3 = df4 = pd.DataFrame()
-
-# ✅ NEW SHEETS
 df7 = pd.DataFrame()
 df8 = pd.DataFrame()
 
@@ -173,12 +171,16 @@ def render_summary():
 
         st.markdown("<div style='margin-top:15px'></div>", unsafe_allow_html=True)
 
-        c5, c6 = st.columns(2)
+        c5, c6, c7, c8 = st.columns(4)
 
         with c5:
             st.markdown(card("TRUE", true_total, 0), unsafe_allow_html=True)
         with c6:
             st.markdown(card("AIS", ais_total, 0), unsafe_allow_html=True)
+        with c7:
+            st.markdown(card("ProvisioningRequester Error", len(df7), len(df7)), unsafe_allow_html=True)
+        with c8:
+            st.markdown(card("ProvisioningResponder Error", len(df8), len(df8)), unsafe_allow_html=True)
 
 render_summary()
 
@@ -232,7 +234,6 @@ if dten_file:
     ais_total = len(df1[df1["Carrier"] == "AIS"])
 
     render_summary()
-
     st.subheader("DTENLinkage")
     st.dataframe(df1.style.apply(highlight_error_dten, axis=1))
 
@@ -268,7 +269,6 @@ if tcap_file:
     tcap_error = len(df2[df2["TypeStatus"] != "OK"])
 
     render_summary()
-
     st.subheader("DTENTCAPLinkage")
     st.dataframe(df2.style.apply(highlight_error_tcap, axis=1))
 
@@ -301,14 +301,12 @@ if req_file:
     df3 = pd.DataFrame(rrows).drop_duplicates(subset=["DeviceID","UUID"])
     df3["ResultCode"] = df3["ResultCode"].astype(str).str.strip()
 
-    # ✅ Sheet 7
     df7 = df3[df3["ResultCode"] != "20000"]
 
     req_total = len(df3)
     req_error = len(df7)
 
     render_summary()
-
     st.subheader("ProvisioningRequester")
     st.dataframe(df3.style.apply(highlight_error_req, axis=1))
 
@@ -347,16 +345,26 @@ if res_file:
     df4 = pd.DataFrame(srows).drop_duplicates(subset=["DeviceID","UUID"])
     df4["ResultCode"] = df4["ResultCode"].astype(str).str.strip()
 
-    # ✅ Sheet 8
     df8 = df4[df4["ResultCode"] != "20000"]
 
     res_total = len(df4)
     res_error = len(df8)
 
     render_summary()
-
     st.subheader("ProvisioningResponder")
     st.dataframe(df4.style.apply(highlight_error_res, axis=1))
+
+
+# =========================
+# 🔥 ERROR TABLES (ต่อท้าย)
+# =========================
+if not df7.empty:
+    st.subheader("ProvisioningRequester Error (Sheet7)")
+    st.dataframe(df7)
+
+if not df8.empty:
+    st.subheader("ProvisioningResponder Error (Sheet8)")
+    st.dataframe(df8)
 
 
 # =========================
@@ -373,8 +381,6 @@ if not df1.empty or not df2.empty or not df3.empty or not df4.empty:
             df3.to_excel(writer, index=False, sheet_name='ProvisioningRequester')
         if not df4.empty:
             df4.to_excel(writer, index=False, sheet_name='ProvisioningResponder')
-
-        # ✅ NEW SHEETS
         if not df7.empty:
             df7.to_excel(writer, index=False, sheet_name='Requester_Error')
         if not df8.empty:
