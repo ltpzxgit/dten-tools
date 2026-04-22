@@ -136,16 +136,21 @@ tcap_total = tcap_error = 0
 req_total = req_error = 0
 res_total = res_error = 0
 
+true_total = 0
+ais_total = 0
+
 df1 = df2 = df3 = df4 = pd.DataFrame()
 
 # =========================
-# SUMMARY (อยู่บน)
+# SUMMARY
 # =========================
 summary_placeholder = st.empty()
 
 def render_summary():
     with summary_placeholder.container():
         st.markdown("### DTEN - Summary")
+
+        # Row 1
         c1, c2, c3, c4 = st.columns(4)
 
         with c1:
@@ -156,6 +161,16 @@ def render_summary():
             st.markdown(card("ProvisioningRequester", req_total, req_error), unsafe_allow_html=True)
         with c4:
             st.markdown(card("ProvisioningResponder", res_total, res_error), unsafe_allow_html=True)
+
+        # Row 2
+        st.markdown("<div style='margin-top:15px'></div>", unsafe_allow_html=True)
+
+        c5, c6 = st.columns(2)
+
+        with c5:
+            st.markdown(card("TRUE", true_total, 0), unsafe_allow_html=True)
+        with c6:
+            st.markdown(card("AIS", ais_total, 0), unsafe_allow_html=True)
 
 render_summary()
 
@@ -200,8 +215,13 @@ if dten_file:
     df1 = pd.DataFrame(rows).drop_duplicates(subset=["DeviceID","Request ID","Date Time"])
     df1["Result"] = df1["Result"].astype(str).str.strip()
 
+    df1["Carrier"] = df1["DeviceID"].apply(get_carrier)
+
     dten_total = len(df1)
     dten_error = len(df1[df1["Result"] != "Process completed successfully"])
+
+    true_total = len(df1[df1["Carrier"] == "TRUE"])
+    ais_total = len(df1[df1["Carrier"] == "AIS"])
 
     render_summary()
 
