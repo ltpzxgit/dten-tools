@@ -377,6 +377,17 @@ if res_file:
     st.dataframe(df4.style.apply(highlight_error_res, axis=1))
 
 # =========================
+# ERROR TABLE
+# =========================
+if not df7.empty:
+    st.subheader("ProvisioningRequester Error")
+    st.dataframe(df7)
+
+if not df8.empty:
+    st.subheader("ProvisioningResponder Error")
+    st.dataframe(df8)
+
+# =========================
 # CLEAN DUPLICATE (เอาแถวบนสุด)
 # =========================
 df3_clean = df3.drop_duplicates(subset=["DeviceID"], keep="first") if not df3.empty else pd.DataFrame(columns=["DeviceID","ResultDesc"])
