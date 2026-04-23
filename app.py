@@ -93,7 +93,6 @@ PAIR_REGEX = r'"LDCMID":"([A-Za-z0-9\-]+)".*?"StatusReg":"([^"]+)".*?"ResDate":"
 TCAP_REGEX = r'"deviceId":"([^"]+)".*?"IMEI":"([^"]+)".*?"ICCID":"([^"]+)".*?"IMSI":"([^"]+)".*?"prodStatus":"([^"]+)".*?"prodDate":"([^"]+)".*?"sendDate":"([^"]+)".*?"typeStatus":"([^"]+)"'
 AIS_REGEX = r'resourceOrderId":\s*"([^"]+)".*?resourceGroupId":\s*"([^"]+)".*?resourceOrderTimeOut":\s*"([^"]+)".*?resultCode":\s*"([^"]+)".*?resultDesc":\s*"([^"]+)".*?developerMessage":\s*"([^"]*)"'
 
-
 # =========================
 # FUNCTIONS
 # =========================
@@ -146,7 +145,6 @@ def highlight_error_req(row):
 def highlight_error_res(row):
     return ['background-color: #ffcccc' if row["ResultCode"] != "20000" else '' for _ in row]
 
-
 # =========================
 # UPLOAD
 # =========================
@@ -175,9 +173,10 @@ ais_total = 0
 df1 = df2 = df3 = df4 = pd.DataFrame()
 df7 = pd.DataFrame()
 df8 = pd.DataFrame()
+df_summary = pd.DataFrame()
 
 # =========================
-# SUMMARY
+# SUMMARY UI
 # =========================
 summary_placeholder = st.empty()
 
@@ -378,15 +377,62 @@ if res_file:
     st.dataframe(df4.style.apply(highlight_error_res, axis=1))
 
 # =========================
-# ERROR TABLE
+# SUMMARY SHEET (NEW)
 # =========================
-if not df7.empty:
-    st.subheader("ProvisioningRequester Error")
-    st.dataframe(df7)
+if not df1.empty:
+    df_summary = df1.copy()
 
-if not df8.empty:
-    st.subheader("ProvisioningResponder Error")
-    st.dataframe(df8)
+    df_summary.insert(0, "No.", range(1, len(df_summary) + 1))
+
+    df_summary = df_summary.merge(
+        df2[["DeviceID", "ProdStatus"]] if not df2.empty else pd.DataFrame(columns=["DeviceID", "ProdStatus"]),
+        on="DeviceID",
+        how="left"
+    )
+
+    df_summary["sent to TCAP Cloud"] = df_summary["DeviceID"].isin(df2["DeviceID"]).map({True: "Yes", False: "No"})
+    df_summary["sent to AIS"] = df_summary["DeviceID"].isin(df3["DeviceID"]).map({True: "Yes", False: "No"})
+
+    df_summary = df_summary.merge(
+        df3[["DeviceID", "ResultDesc"]] if not df3.empty else pd.DataFrame(columns=["DeviceID", "ResultDesc"]),
+        on="DeviceID",
+        how="left"
+    )
+
+    df_summary["sent results"] = df_summary.apply(
+        lambda x: x["ResultDesc"] if x["sent to AIS"] == "No" else "-",
+        axis=1
+    )
+
+    df_summary.drop(columns=["ResultDesc"], inplace=True)
+
+    df_summary["received from AIS"] = df_summary["DeviceID"].isin(df4["DeviceID"]).map({True: "Yes", False: "No"})
+
+    df_summary = df_summary.merge(
+        df4[["DeviceID", "ResultDesc"]] if not df4.empty else pd.DataFrame(columns=["DeviceID", "ResultDesc"]),
+        on="DeviceID",
+        how="left"
+    )
+
+    df_summary["received results"] = df_summary.apply(
+        lambda x: x["ResultDesc"] if x["received from AIS"] == "No" else "-",
+        axis=1
+    )
+
+    df_summary.rename(columns={
+        "Result": "DTENLinkage Result",
+        "ProdStatus": "ProStatus"
+    }, inplace=True)
+
+    df_summary = df_summary[
+        ["No.","Request ID","DeviceID","ProStatus","Carrier",
+         "DTENLinkage Result",
+         "sent to TCAP Cloud","sent to AIS","sent results",
+         "received from AIS","received results"]
+    ]
+
+    st.subheader("Summary")
+    st.dataframe(df_summary)
 
 # =========================
 # EXPORT
@@ -406,6 +452,8 @@ if not df1.empty or not df2.empty or not df3.empty or not df4.empty:
             df7.to_excel(writer, index=False, sheet_name='Requester_Error')
         if not df8.empty:
             df8.to_excel(writer, index=False, sheet_name='Responder_Error')
+        if not df_summary.empty:
+            df_summary.to_excel(writer, index=False, sheet_name='Summary')
 
     output.seek(0)
 
