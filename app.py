@@ -377,7 +377,7 @@ if res_file:
     st.dataframe(df4.style.apply(highlight_error_res, axis=1))
 
 # =========================
-# SUMMARY SHEET (NEW)
+# SUMMARY SHEET (UPDATED LOGIC)
 # =========================
 if not df1.empty:
     df_summary = df1.copy()
@@ -399,8 +399,9 @@ if not df1.empty:
         how="left"
     )
 
+    # ✅ FIX: ใช้ Carrier แทน
     df_summary["sent results"] = df_summary.apply(
-        lambda x: x["ResultDesc"] if x["sent to AIS"] == "No" else "-",
+        lambda x: "-" if x["Carrier"] == "TRUE" else x["ResultDesc"],
         axis=1
     )
 
@@ -414,8 +415,9 @@ if not df1.empty:
         how="left"
     )
 
+    # ✅ FIX: ใช้ Carrier แทน
     df_summary["received results"] = df_summary.apply(
-        lambda x: x["ResultDesc"] if x["received from AIS"] == "No" else "-",
+        lambda x: "-" if x["Carrier"] == "TRUE" else x["ResultDesc"],
         axis=1
     )
 
