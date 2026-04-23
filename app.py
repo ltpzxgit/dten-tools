@@ -377,7 +377,13 @@ if res_file:
     st.dataframe(df4.style.apply(highlight_error_res, axis=1))
 
 # =========================
-# SUMMARY SHEET (UPDATED LOGIC)
+# 🔥 FIX DUPLICATE BEFORE MERGE
+# =========================
+df3_clean = df3.sort_values("UUID").drop_duplicates(subset=["DeviceID"], keep="last") if not df3.empty else pd.DataFrame(columns=["DeviceID","ResultDesc"])
+df4_clean = df4.sort_values("UUID").drop_duplicates(subset=["DeviceID"], keep="last") if not df4.empty else pd.DataFrame(columns=["DeviceID","ResultDesc"])
+
+# =========================
+# SUMMARY SHEET
 # =========================
 if not df1.empty:
     df_summary = df1.copy()
@@ -391,15 +397,10 @@ if not df1.empty:
     )
 
     df_summary["sent to TCAP Cloud"] = df_summary["DeviceID"].isin(df2["DeviceID"]).map({True: "Yes", False: "No"})
-    df_summary["sent to AIS"] = df_summary["DeviceID"].isin(df3["DeviceID"]).map({True: "Yes", False: "No"})
+    df_summary["sent to AIS"] = df_summary["DeviceID"].isin(df3_clean["DeviceID"]).map({True: "Yes", False: "No"})
 
-    df_summary = df_summary.merge(
-        df3[["DeviceID", "ResultDesc"]] if not df3.empty else pd.DataFrame(columns=["DeviceID", "ResultDesc"]),
-        on="DeviceID",
-        how="left"
-    )
+    df_summary = df_summary.merge(df3_clean[["DeviceID", "ResultDesc"]], on="DeviceID", how="left")
 
-    # ✅ FIX: ใช้ Carrier แทน
     df_summary["sent results"] = df_summary.apply(
         lambda x: "-" if x["Carrier"] == "TRUE" else x["ResultDesc"],
         axis=1
@@ -407,15 +408,10 @@ if not df1.empty:
 
     df_summary.drop(columns=["ResultDesc"], inplace=True)
 
-    df_summary["received from AIS"] = df_summary["DeviceID"].isin(df4["DeviceID"]).map({True: "Yes", False: "No"})
+    df_summary["received from AIS"] = df_summary["DeviceID"].isin(df4_clean["DeviceID"]).map({True: "Yes", False: "No"})
 
-    df_summary = df_summary.merge(
-        df4[["DeviceID", "ResultDesc"]] if not df4.empty else pd.DataFrame(columns=["DeviceID", "ResultDesc"]),
-        on="DeviceID",
-        how="left"
-    )
+    df_summary = df_summary.merge(df4_clean[["DeviceID", "ResultDesc"]], on="DeviceID", how="left")
 
-    # ✅ FIX: ใช้ Carrier แทน
     df_summary["received results"] = df_summary.apply(
         lambda x: "-" if x["Carrier"] == "TRUE" else x["ResultDesc"],
         axis=1
