@@ -8,12 +8,18 @@ st.set_page_config(page_title="ITOSE - DTEN", layout="wide")
 st.title("ITOSE Tools - DTEN Summary")
 
 # =========================
-# CSS
+# CSS (🔥 UPGRADED STYLE)
 # =========================
 st.markdown("""
 <style>
-.block-container { padding-top: 2rem; padding-bottom: 2rem; }
 
+/* ===== GLOBAL ===== */
+.block-container {
+    padding-top: 2rem;
+    padding-bottom: 2rem;
+}
+
+/* ===== CARD BASE ===== */
 .card {
     padding: 24px;
     border-radius: 18px;
@@ -21,8 +27,17 @@ st.markdown("""
     border: 1px solid rgba(148, 163, 184, 0.2);
     text-align: center;
     margin-bottom: 16px;
+    transition: all 0.25s ease;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.35);
 }
 
+.card:hover {
+    transform: translateY(-3px);
+    border: 1px solid rgba(148, 163, 184, 0.4);
+    box-shadow: 0 10px 28px rgba(0,0,0,0.55);
+}
+
+/* ===== RED CARD ===== */
 .card-red {
     padding: 24px;
     border-radius: 18px;
@@ -30,10 +45,41 @@ st.markdown("""
     border: 1px solid rgba(239, 68, 68, 0.5);
     text-align: center;
     margin-bottom: 16px;
+    transition: all 0.25s ease;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.35);
 }
 
-.card-title { font-size: 15px; color: #9ca3af; }
-.card-value { font-size: 52px; font-weight: 700; color: #fff; }
+.card-red:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 10px 28px rgba(0,0,0,0.55);
+}
+
+/* ===== TITLE ===== */
+.card-title {
+    font-size: 15px;
+    color: #9ca3af;
+    margin-bottom: 8px;
+    letter-spacing: 0.3px;
+}
+
+/* ===== VALUE ===== */
+.card-value {
+    font-size: 52px;
+    font-weight: 700;
+    color: #ffffff;
+    letter-spacing: 1px;
+}
+
+/* ===== FIX COLUMN GAP ===== */
+div[data-testid="column"] > div {
+    margin-bottom: 10px;
+}
+
+/* ===== SUMMARY TITLE ===== */
+h2 {
+    margin-bottom: 20px !important;
+}
+
 </style>
 """, unsafe_allow_html=True)
 
@@ -331,7 +377,7 @@ if res_file:
     st.dataframe(df4.style.apply(highlight_error_res, axis=1))
 
 # =========================
-# CLEAN (เอาแถวบนสุด = ล่าสุด)
+# CLEAN DUPLICATE (เอาแถวบนสุด)
 # =========================
 df3_clean = df3.drop_duplicates(subset=["DeviceID"], keep="first") if not df3.empty else pd.DataFrame(columns=["DeviceID","ResultDesc"])
 df4_clean = df4.drop_duplicates(subset=["DeviceID"], keep="first") if not df4.empty else pd.DataFrame(columns=["DeviceID","ResultDesc"])
@@ -356,7 +402,7 @@ if not df1.empty:
     df_summary = df_summary.merge(df3_clean[["DeviceID", "ResultDesc"]], on="DeviceID", how="left")
 
     df_summary["sent results"] = df_summary.apply(
-        lambda x: "-" if x["Carrier"] == "TRUE" else x["ResultDesc"],
+        lambda x: "-" if (x["Carrier"] == "TRUE" or str(x["ProdStatus"]) == "SVCP") else x["ResultDesc"],
         axis=1
     )
 
@@ -367,7 +413,7 @@ if not df1.empty:
     df_summary = df_summary.merge(df4_clean[["DeviceID", "ResultDesc"]], on="DeviceID", how="left")
 
     df_summary["received results"] = df_summary.apply(
-        lambda x: "-" if x["Carrier"] == "TRUE" else x["ResultDesc"],
+        lambda x: "-" if (x["Carrier"] == "TRUE" or str(x["ProdStatus"]) == "SVCP") else x["ResultDesc"],
         axis=1
     )
 
